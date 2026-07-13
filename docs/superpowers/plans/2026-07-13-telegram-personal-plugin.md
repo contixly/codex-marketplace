@@ -242,6 +242,7 @@ Set `.gitignore` to:
 ```gitignore
 .DS_Store
 .worktrees/
+.superpowers/
 __pycache__/
 .pytest_cache/
 *.py[cod]
