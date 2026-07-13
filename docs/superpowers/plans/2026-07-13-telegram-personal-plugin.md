@@ -241,6 +241,7 @@ Set `.gitignore` to:
 
 ```gitignore
 .DS_Store
+.worktrees/
 __pycache__/
 .pytest_cache/
 *.py[cod]
