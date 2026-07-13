@@ -1408,14 +1408,14 @@ git commit -m "ci: verify Telegram plugin safety"
 
 ---
 
-### Task 9: Validate installation from the marketplace and publish
+### Task 9: Validate installation and publish the feature branch
 
 **Files:**
 - Modify only files required by failures found in this task.
 
 **Interfaces:**
 - Consumes: complete marketplace and plugin.
-- Produces: a tested public `main` branch installable by Katya.
+- Produces: a tested remote feature branch ready for final integration into `main`.
 
 - [ ] **Step 1: Run plugin and marketplace validators from a clean state**
 
@@ -1490,24 +1490,24 @@ git diff --check
 
 Expected: clean `main`, the design/plan plus implementation commits are visible, and diff check is silent.
 
-- [ ] **Step 6: Push the public marketplace**
+- [ ] **Step 6: Push the verified feature branch**
 
 ```bash
-git push origin main
+git push -u origin feature/telegram-personal-plugin
 ```
 
-Expected: `origin/main` advances to the verified implementation commit and GitHub Actions starts.
+Expected: `origin/feature/telegram-personal-plugin` advances to the verified implementation commit and GitHub Actions starts.
 
 - [ ] **Step 7: Verify the public Git marketplace without installing it globally**
 
 ```bash
-git ls-remote --heads origin main
+git ls-remote --heads origin feature/telegram-personal-plugin
 curl -fsSL \
-  https://raw.githubusercontent.com/contixly/codex-marketplace/main/.agents/plugins/marketplace.json \
+  https://raw.githubusercontent.com/contixly/codex-marketplace/feature/telegram-personal-plugin/.agents/plugins/marketplace.json \
   | python3 -m json.tool >/dev/null
 ```
 
-Expected: the remote main SHA matches local `HEAD`; public marketplace JSON parses successfully.
+Expected: the remote feature-branch SHA matches local `HEAD`; public marketplace JSON parses successfully. Integrating the reviewed branch into `main` is handled by the branch-finishing workflow.
 
 ---
 
