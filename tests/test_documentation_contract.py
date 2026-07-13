@@ -23,11 +23,17 @@ class DocumentationContractTests(unittest.TestCase):
             "send_photo",
             "complete summary",
             "explicit user confirmation",
-            "later user turn",
+            "Only the very next user turn immediately after the complete prepared summary can confirm that action.",
+            "If that next user turn is not an unambiguous approval",
+            "including a question, clarification, correction, unrelated request, or mixed response",
+            "do not send or ask for confirmation of the old prepared action",
+            "call the matching prepare tool again, display the new complete summary, and request new explicit confirmation",
+            "This agent-side next-turn rule is stricter than the server's five-minute TTL.",
             "prepared_action_id",
             "confirmation_required",
             "untrusted external content",
-            "Never send a test message",
+            "During setup or diagnostics, do not call any prepare or send tool for a test or probe message or photo.",
+            "authorized=true is sufficient proof",
         ):
             self.assertIn(required, text)
 
@@ -58,6 +64,13 @@ class DocumentationContractTests(unittest.TestCase):
             "send_message",
             "prepare_send_photo",
             "send_photo",
+            "Only the very next user turn immediately after the complete prepared summary can confirm that action.",
+            "If that next turn contains a question, clarification, correction, unrelated request, ambiguous answer, or mixed response",
+            "the old prepared action must not be sent or presented for confirmation again",
+            "run the matching prepare tool again, show the new complete summary, and obtain new explicit confirmation",
+            "This agent-side next-turn rule is intentionally stricter than the server's five-minute TTL.",
+            "Setup and diagnostics must not call prepare or send for any test or probe message or photo.",
+            "authorized=true is sufficient proof",
             "700",
             "600",
         ):
