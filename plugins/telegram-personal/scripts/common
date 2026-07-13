@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLUGIN_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+DATA_ROOT="${TELEGRAM_PLUGIN_DATA_DIR:-$CODEX_HOME/telegram-personal}"
+VENV="$DATA_ROOT/.venv"
+export TELEGRAM_PLUGIN_DATA_DIR="$DATA_ROOT"
+export TELEGRAM_ENV_FILE="$DATA_ROOT/telegram.env"
+export PYTHONPATH="$PLUGIN_ROOT/server"
+
+require_runtime() {
+  if [[ ! -x "$VENV/bin/python" ]]; then
+    printf '%s\n' "Telegram Personal is not configured. Run: $PLUGIN_ROOT/scripts/setup" >&2
+    exit 78
+  fi
+}
