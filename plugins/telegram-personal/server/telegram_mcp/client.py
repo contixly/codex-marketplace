@@ -5,7 +5,7 @@ from typing import Any
 
 from telethon import TelegramClient
 
-from telegram_mcp.config import TelegramSettings
+from telegram_mcp.config import TelegramSettings, ensure_runtime_directories
 
 
 DIALOG_RESOLVE_LIMIT = 1000
@@ -135,7 +135,7 @@ async def download_media(
     if not getattr(message, "media", None):
         raise RuntimeError(f"Telegram message {message_id} has no media to download.")
 
-    settings.downloads_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    ensure_runtime_directories(settings)
     path = await client.download_media(message, file=str(settings.downloads_dir))
     if not path:
         raise RuntimeError(f"Telegram media download failed for message {message_id}.")

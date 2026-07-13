@@ -3,6 +3,7 @@ from stat import S_IMODE
 
 from telegram_mcp.config import (
     TelegramSettings,
+    ensure_runtime_directories,
     load_settings,
     resolve_codex_home,
     resolve_data_dir,
@@ -33,16 +34,17 @@ def test_load_settings_uses_portable_defaults(tmp_path):
     assert settings.message_limit_max == 100
 
 
-def test_load_settings_creates_private_runtime_directories(tmp_path):
+def test_load_settings_is_non_mutating_when_runtime_is_absent(tmp_path):
     env_file = tmp_path / "runtime/telegram.env"
 
     settings = load_settings(env_file)
 
-    assert S_IMODE(env_file.parent.stat().st_mode) == 0o700
-    assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
+    assert settings.env_file == env_file
+    assert not env_file.parent.exists()
+    assert not settings.downloads_dir.exists()
 
 
-def test_load_settings_restricts_existing_runtime_directories(tmp_path):
+def test_load_settings_does_not_change_existing_runtime_permissions(tmp_path):
     data_dir = tmp_path / "runtime"
     downloads_dir = data_dir / "downloads"
     downloads_dir.mkdir(parents=True)
@@ -51,6 +53,31 @@ def test_load_settings_restricts_existing_runtime_directories(tmp_path):
     env_file = data_dir / "telegram.env"
 
     settings = load_settings(env_file)
+
+    assert settings.downloads_dir == downloads_dir
+    assert S_IMODE(data_dir.stat().st_mode) == 0o755
+    assert S_IMODE(downloads_dir.stat().st_mode) == 0o755
+
+
+def test_ensure_runtime_directories_creates_private_runtime_directories(tmp_path):
+    env_file = tmp_path / "runtime/telegram.env"
+    settings = load_settings(env_file)
+
+    ensure_runtime_directories(settings)
+
+    assert S_IMODE(env_file.parent.stat().st_mode) == 0o700
+    assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
+
+
+def test_ensure_runtime_directories_restricts_existing_directories(tmp_path):
+    data_dir = tmp_path / "runtime"
+    downloads_dir = data_dir / "downloads"
+    downloads_dir.mkdir(parents=True)
+    data_dir.chmod(0o755)
+    downloads_dir.chmod(0o755)
+    settings = load_settings(data_dir / "telegram.env")
+
+    ensure_runtime_directories(settings)
 
     assert S_IMODE(data_dir.stat().st_mode) == 0o700
     assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700

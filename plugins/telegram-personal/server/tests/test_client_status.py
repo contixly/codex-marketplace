@@ -220,15 +220,21 @@ def test_read_messages_resolves_recipient_and_honors_limit():
     assert payloads == [message_to_payload(message)]
 
 
-def test_download_media_creates_directory_and_returns_absolute_path(tmp_path):
+def test_download_media_secures_runtime_directories_and_returns_absolute_path(tmp_path):
     message = SimpleNamespace(id=7, media=object())
     client = FakeOperations(messages=[message])
-    client.downloaded_path = tmp_path / "downloads" / "photo.jpg"
-    settings = make_settings(tmp_path)
+    data_dir = tmp_path / "runtime"
+    downloads_dir = data_dir / "downloads"
+    downloads_dir.mkdir(parents=True)
+    data_dir.chmod(0o755)
+    downloads_dir.chmod(0o755)
+    client.downloaded_path = downloads_dir / "photo.jpg"
+    settings = make_settings(data_dir)
 
     path = asyncio.run(download_media(client, settings, "example", 7))
 
-    assert settings.downloads_dir.is_dir()
+    assert S_IMODE(data_dir.stat().st_mode) == 0o700
+    assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
     assert client.download_file == str(settings.downloads_dir)
     assert path == str(client.downloaded_path.resolve())
 

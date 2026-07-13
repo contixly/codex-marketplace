@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Iterable
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,29 @@ FORBIDDEN_PARTS = {".venv", "__pycache__", ".pytest_cache", "downloads"}
 FORBIDDEN_TEXT = ("/" + "Users/",)
 EXAMPLE_ENV_NAMES = {"telegram.env.example"}
 EXAMPLE_CREDENTIAL_KEYS = {"TELEGRAM_API_ID", "TELEGRAM_API_HASH"}
+IDENTITY_PLACEHOLDERS = {
+    "account",
+    "example",
+    "none",
+    "null",
+    "recipient",
+    "test",
+    "user",
+}
+
+_IDENTITY_PREFIX = re.compile(
+    r"^\s*(?:authorized|private source account|telegram account)\b",
+    re.IGNORECASE,
+)
+_TELEGRAM_HANDLE = re.compile(r"(?<![A-Za-z0-9_])@([A-Za-z][A-Za-z0-9_]{4,31})\b")
+_LABELED_TELEGRAM_HANDLE = re.compile(
+    r"\b(?:username|handle)\s*[:=]\s*@?([A-Za-z][A-Za-z0-9_]{4,31})\b",
+    re.IGNORECASE,
+)
+_TELEGRAM_ACCOUNT_ID = re.compile(
+    r"\b(?:user_id|account_id|id)\s*[:=]\s*\d{6,15}\b",
+    re.IGNORECASE,
+)
 
 MARKETPLACE_PATH = Path(".agents/plugins/marketplace.json")
 PLUGIN_ROOT_PATH = Path("plugins/telegram-personal")
@@ -30,7 +55,7 @@ def scan_paths(root: Path, relative_paths: Iterable[Path]) -> list[str]:
     errors: list[str] = []
     resolved_root = root.resolve()
     for relative in relative_paths:
-        if relative.name in FORBIDDEN_NAMES:
+        if _is_forbidden_runtime_filename(relative.name):
             errors.append(f"forbidden tracked file: {relative}")
             continue
         if any(part in FORBIDDEN_PARTS for part in relative.parts):
@@ -71,15 +96,48 @@ def scan_paths(root: Path, relative_paths: Iterable[Path]) -> list[str]:
                 errors.append(f"forbidden source-machine path in: {relative}")
                 break
 
-        if relative.name in EXAMPLE_ENV_NAMES:
+        if _is_env_like_filename(relative.name):
             for line in text.splitlines():
                 key, separator, value = line.partition("=")
                 if separator and key.strip() in EXAMPLE_CREDENTIAL_KEYS and value.strip():
+                    label = (
+                        "nonblank example credential"
+                        if relative.name in EXAMPLE_ENV_NAMES
+                        else "nonblank Telegram credential"
+                    )
                     errors.append(
-                        f"nonblank example credential {key.strip()} in: {relative}"
+                        f"{label} {key.strip()} in: {relative}"
                     )
 
+        if _contains_private_telegram_identity(text):
+            errors.append(f"possible private Telegram account identity in: {relative}")
+
     return errors
+
+
+def _is_forbidden_runtime_filename(name: str) -> bool:
+    if name in FORBIDDEN_NAMES:
+        return True
+    if fnmatchcase(name, "*.session") or fnmatchcase(name, "*.session-*"):
+        return True
+    return name.startswith("telegram.env.") and name not in EXAMPLE_ENV_NAMES
+
+
+def _is_env_like_filename(name: str) -> bool:
+    return name == ".env" or fnmatchcase(name, "*.env") or ".env." in name
+
+
+def _contains_private_telegram_identity(text: str) -> bool:
+    for line in text.splitlines():
+        if not _IDENTITY_PREFIX.search(line) or not _TELEGRAM_ACCOUNT_ID.search(line):
+            continue
+        handles = [
+            *(_TELEGRAM_HANDLE.findall(line)),
+            *(_LABELED_TELEGRAM_HANDLE.findall(line)),
+        ]
+        if any(handle.casefold() not in IDENTITY_PLACEHOLDERS for handle in handles):
+            return True
+    return False
 
 
 def _is_within(path: Path, root: Path) -> bool:

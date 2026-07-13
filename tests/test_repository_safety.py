@@ -108,6 +108,75 @@ class RepositorySafetyTests(unittest.TestCase):
                 all("nonblank example credential" in error for error in errors)
             )
 
+    def test_publication_scan_rejects_session_env_backup_and_private_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            unsafe_bytes = {
+                Path("account.session"): b"\xff\xfe\x00session",
+                Path("account.session-journal"): b"\xff\xfe\x00journal",
+                Path("runtime/telegram.env.backup"): (
+                    b"TELEGRAM_API_ID=123456\nTELEGRAM_API_HASH=fake-value\n"
+                ),
+                Path("notes.txt"): (
+                    b"private source account @real_account id=123456789\n"
+                ),
+            }
+            for relative, content in unsafe_bytes.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+
+            errors = scan_paths(root, unsafe_bytes)
+
+            self.assertEqual(len(errors), 4)
+            for relative in unsafe_bytes:
+                matching = [
+                    error for error in errors if error.endswith(f": {relative}")
+                ]
+                self.assertEqual(len(matching), 1)
+            self.assertTrue(all("real_account" not in error for error in errors))
+            self.assertTrue(all("123456789" not in error for error in errors))
+
+    def test_env_like_files_reject_nonblank_telegram_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env_files = {
+                Path(".env"): "TELEGRAM_API_ID=123456\n",
+                Path("service.env"): "TELEGRAM_API_HASH=fake-value\n",
+                Path("archive.env.copy"): "TELEGRAM_API_ID = 654321\n",
+            }
+            for relative, content in env_files.items():
+                (root / relative).write_text(content, encoding="utf-8")
+
+            errors = scan_paths(root, env_files)
+
+            self.assertEqual(len(errors), 3)
+            for relative in env_files:
+                self.assertTrue(any(str(relative) in error for error in errors))
+
+    def test_blank_example_and_placeholder_identity_lines_are_safe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            safe_files = {
+                Path("telegram.env.example"): (
+                    "TELEGRAM_API_ID=\nTELEGRAM_API_HASH=\n"
+                ),
+                Path("placeholders.txt"): (
+                    "authorized username=example user_id=123456789\n"
+                    "private source account @recipient id=123456789\n"
+                    "telegram account @real_account id=<id>\n"
+                    "documentation: private source account @real_account "
+                    "id=123456789\n"
+                ),
+                Path("source.py"): (
+                    'print(f"authorized user_id={user_id} username={username}")\n'
+                ),
+            }
+            for relative, content in safe_files.items():
+                (root / relative).write_text(content, encoding="utf-8")
+
+            self.assertEqual(scan_paths(root, safe_files), [])
+
     def test_valid_metadata_passes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

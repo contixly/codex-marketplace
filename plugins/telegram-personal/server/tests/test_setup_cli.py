@@ -116,6 +116,8 @@ def test_main_configures_authorizes_secures_session_and_prints_safe_status(
 
     async def fake_authorize():
         assert env_file.exists()
+        assert stat.S_IMODE(env_file.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE((env_file.parent / "downloads").stat().st_mode) == 0o700
         session_file.write_text("session", encoding="utf-8")
         session_file.chmod(0o644)
 

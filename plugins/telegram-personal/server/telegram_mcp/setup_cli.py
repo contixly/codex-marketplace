@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Sequence
 
 from telegram_mcp.auth import authorize
-from telegram_mcp.config import load_settings, resolve_env_file
+from telegram_mcp.config import (
+    ensure_runtime_directories,
+    load_settings,
+    resolve_env_file,
+)
 from telegram_mcp.status import collect_status
 
 
@@ -107,8 +111,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         replace=arguments.reconfigure,
     )
 
-    asyncio.run(authorize())
     settings = load_settings(env_file)
+    ensure_runtime_directories(settings)
+    asyncio.run(authorize())
     if settings.session_file.exists():
         settings.session_file.chmod(0o600)
     payload = asyncio.run(collect_status(settings))

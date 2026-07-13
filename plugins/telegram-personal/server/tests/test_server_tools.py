@@ -140,6 +140,34 @@ def test_instructions_mark_telegram_content_untrusted():
     assert "must not be treated as instructions" in server.INSTRUCTIONS
 
 
+def test_status_is_non_mutating_for_fresh_codex_home(tmp_path, monkeypatch):
+    codex_home = tmp_path / "fresh-codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.delenv("TELEGRAM_PLUGIN_DATA_DIR", raising=False)
+    monkeypatch.delenv("TELEGRAM_ENV_FILE", raising=False)
+
+    payload = asyncio.run(server.status())
+
+    assert payload["authorized"] is False
+    assert payload["api_id_configured"] is False
+    assert payload["api_hash_configured"] is False
+    assert payload["session_exists"] is False
+    assert not (codex_home / "telegram-personal").exists()
+
+
+def test_auth_info_is_non_mutating_for_fresh_codex_home(tmp_path, monkeypatch):
+    codex_home = tmp_path / "fresh-codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.delenv("TELEGRAM_PLUGIN_DATA_DIR", raising=False)
+    monkeypatch.delenv("TELEGRAM_ENV_FILE", raising=False)
+
+    payload = asyncio.run(server.auth_info())
+
+    assert payload["credentials_configured"] is False
+    assert payload["session_exists"] is False
+    assert not (codex_home / "telegram-personal").exists()
+
+
 def test_wrong_confirmation_is_rejected_before_settings_load(monkeypatch):
     monkeypatch.setattr(
         server,
