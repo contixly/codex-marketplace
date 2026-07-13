@@ -164,6 +164,22 @@ async def send_photo(
     return message_to_payload(sent_message)
 
 
+async def send_document(
+    client: Any,
+    recipient: Any,
+    document_file: Any,
+    caption: str | None,
+) -> dict[str, Any]:
+    entity = await resolve_entity(client, recipient)
+    sent_message = await client.send_file(
+        entity,
+        file=document_file,
+        caption=caption,
+        force_document=True,
+    )
+    return message_to_payload(sent_message)
+
+
 def _matches_dialog_query(payload: dict[str, Any], query_text: str) -> bool:
     if not query_text:
         return True

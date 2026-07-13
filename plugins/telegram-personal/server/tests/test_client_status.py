@@ -17,6 +17,7 @@ from telegram_mcp.client import (
     message_to_payload,
     read_messages,
     resolve_entity,
+    send_document,
     send_message,
     send_photo,
 )
@@ -267,6 +268,33 @@ def test_send_helpers_return_safe_payloads_and_send_photo_as_photo():
     assert client.send_file_call == (
         "entity:example",
         {"file": image_file, "caption": "caption", "force_document": False},
+    )
+
+
+def test_send_document_preserves_in_memory_file_and_uses_document_mode():
+    message = SimpleNamespace(
+        id=8,
+        date=None,
+        sender_id=9,
+        text="caption",
+        media=object(),
+    )
+    client = FakeOperations(messages=[message])
+    document_file = BytesIO(b"exact document bytes")
+    document_file.name = "intent.md"
+
+    payload = asyncio.run(
+        send_document(client, "example", document_file, "caption")
+    )
+
+    assert payload == message_to_payload(message)
+    assert client.send_file_call == (
+        "entity:example",
+        {
+            "file": document_file,
+            "caption": "caption",
+            "force_document": True,
+        },
     )
 
 
