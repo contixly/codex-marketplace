@@ -337,6 +337,10 @@ if [[ "$1" == "-m" && "$2" == "venv" ]]; then
   mkdir -p "$3/bin"
   cat > "$3/bin/python" <<'PYTHON'
 #!/usr/bin/env bash
+if [[ "$1" == "-c" ]]; then
+  printf '3 14 1\n'
+  exit 0
+fi
 printf '%s\n' "$*" >> "$SETUP_CALLS"
 PYTHON
   chmod 755 "$3/bin/python"
@@ -361,6 +365,127 @@ exit 97
 
     assert result.returncode == 0, result.stderr
     assert stat.S_IMODE(data_root.stat().st_mode) == 0o700
+    assert calls_file.read_text(encoding="utf-8").splitlines() == [
+        f"-m pip install -r {PLUGIN_ROOT / 'requirements.txt'}",
+        "-m telegram_mcp.setup_cli --reconfigure",
+    ]
+
+
+def _write_fake_runtime_python(path, runtime_info):
+    _write_executable(
+        path,
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"-c\" ]]; then\n"
+        f"  printf '{runtime_info}\\n'\n"
+        "  printf 'validated\\n' > \"$RUNTIME_VALIDATION_CALLS\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf '%s\\n' \"$*\" >> \"$SETUP_CALLS\"\n",
+    )
+
+
+def _write_supported_path_python(path):
+    _write_executable(
+        path,
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"-c\" ]]; then\n"
+        "  printf '3 14\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'existing runtime must not be recreated\\n' >&2\n"
+        "exit 98\n",
+    )
+
+
+def _run_setup_with_existing_runtime(tmp_path, runtime_info):
+    fake_bin = tmp_path / "bin"
+    data_root = tmp_path / "data"
+    runtime_python = data_root / ".venv/bin/python"
+    calls_file = tmp_path / "calls"
+    validation_file = tmp_path / "validation"
+    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf 'Darwin\\n'\n")
+    _write_supported_path_python(fake_bin / "python3")
+    _write_fake_runtime_python(runtime_python, runtime_info)
+    original_runtime = runtime_python.read_bytes()
+
+    result = subprocess.run(
+        [str(SCRIPTS_DIR / "setup"), "--reconfigure"],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "TELEGRAM_PLUGIN_DATA_DIR": str(data_root),
+            "SETUP_CALLS": str(calls_file),
+            "RUNTIME_VALIDATION_CALLS": str(validation_file),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result, runtime_python, original_runtime, calls_file, validation_file
+
+
+def test_setup_refuses_preexisting_python_310_runtime_without_modifying_it(tmp_path):
+    result, runtime_python, original_runtime, calls_file, validation_file = (
+        _run_setup_with_existing_runtime(tmp_path, "3 10 1")
+    )
+
+    assert result.returncode != 0
+    assert "Python 3.11-3.14" in result.stderr
+    assert runtime_python.read_bytes() == original_runtime
+    assert validation_file.read_text(encoding="utf-8") == "validated\n"
+    assert not calls_file.exists()
+
+
+def test_setup_refuses_preexisting_non_venv_runtime_without_modifying_it(tmp_path):
+    result, runtime_python, original_runtime, calls_file, validation_file = (
+        _run_setup_with_existing_runtime(tmp_path, "3 14 0")
+    )
+
+    assert result.returncode != 0
+    assert "virtual environment" in result.stderr
+    assert runtime_python.read_bytes() == original_runtime
+    assert validation_file.read_text(encoding="utf-8") == "validated\n"
+    assert not calls_file.exists()
+
+
+def test_setup_refuses_nonexecutable_preexisting_runtime_without_recreating_it(
+    tmp_path,
+):
+    fake_bin = tmp_path / "bin"
+    data_root = tmp_path / "data"
+    runtime_python = data_root / ".venv/bin/python"
+    _write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf 'Darwin\\n'\n")
+    _write_supported_path_python(fake_bin / "python3")
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("not executable\n", encoding="utf-8")
+    runtime_python.chmod(0o600)
+
+    result = subprocess.run(
+        [str(SCRIPTS_DIR / "setup")],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "TELEGRAM_PLUGIN_DATA_DIR": str(data_root),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "executable" in result.stderr
+    assert runtime_python.read_text(encoding="utf-8") == "not executable\n"
+    assert stat.S_IMODE(runtime_python.stat().st_mode) == 0o600
+
+
+def test_setup_reuses_valid_preexisting_virtual_environment(tmp_path):
+    result, runtime_python, original_runtime, calls_file, validation_file = (
+        _run_setup_with_existing_runtime(tmp_path, "3 14 1")
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert runtime_python.read_bytes() == original_runtime
+    assert validation_file.read_text(encoding="utf-8") == "validated\n"
     assert calls_file.read_text(encoding="utf-8").splitlines() == [
         f"-m pip install -r {PLUGIN_ROOT / 'requirements.txt'}",
         "-m telegram_mcp.setup_cli --reconfigure",
