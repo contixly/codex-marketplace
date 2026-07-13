@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import secrets
+import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -167,30 +170,56 @@ def validate_image_file(
     except OSError as error:
         raise ValueError(f"Telegram image path cannot be resolved: {error}") from error
 
-    if not path.is_file():
-        raise ValueError("Telegram image path must reference a regular file.")
-
+    descriptor: int | None = None
     try:
-        size_bytes = path.stat().st_size
-    except OSError as error:
-        raise ValueError(f"Telegram image cannot be inspected: {error}") from error
-    if size_bytes <= 0:
-        raise ValueError("Telegram image file must not be empty.")
-    if max_bytes is not None and size_bytes > max_bytes:
-        raise ValueError(
-            f"Telegram image exceeds the configured {max_bytes}-byte upload limit."
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
         )
+        descriptor = os.open(path, flags)
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("Telegram image path must reference a regular file.")
+        if before.st_size <= 0:
+            raise ValueError("Telegram image file must not be empty.")
+        if max_bytes is not None and before.st_size > max_bytes:
+            raise ValueError(
+                f"Telegram image exceeds the configured {max_bytes}-byte upload limit."
+            )
 
-    try:
-        with path.open("rb") as source:
-            header = source.read(16)
-            digest = hashlib.sha256(header)
+        source = os.fdopen(descriptor, "rb")
+        descriptor = None
+        with source:
+            header = bytearray()
+            digest = hashlib.sha256()
+            size_bytes = 0
             for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                size_bytes += len(chunk)
+                if max_bytes is not None and size_bytes > max_bytes:
+                    raise ValueError(
+                        "Telegram image exceeds the configured "
+                        f"{max_bytes}-byte upload limit."
+                    )
+                if len(header) < 16:
+                    header.extend(chunk[: 16 - len(header)])
                 digest.update(chunk)
+            after = os.fstat(source.fileno())
     except OSError as error:
         raise ValueError(f"Telegram image cannot be read: {error}") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
-    media_type = _media_type_from_header(header)
+    if size_bytes <= 0:
+        raise ValueError("Telegram image file must not be empty.")
+    if size_bytes != after.st_size or _descriptor_metadata(before) != _descriptor_metadata(
+        after
+    ):
+        raise ValueError("Telegram image changed during validation; prepare it again.")
+
+    media_type = _media_type_from_header(bytes(header))
     if media_type is None:
         raise ValueError(
             "Telegram image must use a supported image format: PNG, JPEG, GIF, or WebP."
@@ -205,13 +234,17 @@ def validate_image_file(
 
 
 def image_payload_summary(image: ValidatedImage, caption: str | None) -> str:
-    lines = [
-        "Image:",
-        f"{image.path.name} ({image.media_type}, {image.size_bytes} bytes)",
-        "Caption:",
-        caption if caption is not None else "(none)",
-    ]
-    return "\n".join(lines)
+    return json.dumps(
+        {
+            "filename": image.path.name,
+            "media_type": image.media_type,
+            "sha256": image.sha256,
+            "size_bytes": image.size_bytes,
+            "caption": caption,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 def _media_type_from_header(header: bytes) -> str | None:
@@ -221,3 +254,15 @@ def _media_type_from_header(header: bytes) -> str | None:
     if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+def _descriptor_metadata(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
