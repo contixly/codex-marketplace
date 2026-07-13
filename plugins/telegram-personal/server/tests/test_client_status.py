@@ -1,11 +1,12 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from stat import S_IMODE
 from types import SimpleNamespace
 
 import pytest
 
-from telegram_mcp import auth, status
+from telegram_mcp import auth, client as client_module, status
 from telegram_mcp.client import (
     create_client,
     dialog_to_payload,
@@ -88,9 +89,46 @@ def test_safe_labels_and_dialog_payloads():
 
 
 def test_create_client_rejects_missing_credentials(tmp_path):
-    settings = make_settings(tmp_path, api_id=None, api_hash="")
+    settings = make_settings(tmp_path / "runtime", api_id=None, api_hash="")
     with pytest.raises(RuntimeError, match="Run the plugin setup first"):
         create_client(settings)
+    assert not settings.session_file.exists()
+    assert not settings.session_file.parent.exists()
+
+
+def test_create_client_secures_fresh_session_before_telethon_opens_it(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path / "runtime")
+    sentinel = object()
+
+    def fake_telegram_client(session_name, api_id, api_hash):
+        assert session_name == settings.session_name
+        assert api_id == settings.api_id
+        assert api_hash == settings.api_hash
+        assert settings.session_file.exists()
+        assert S_IMODE(settings.session_file.parent.stat().st_mode) == 0o700
+        assert S_IMODE(settings.session_file.stat().st_mode) == 0o600
+        return sentinel
+
+    monkeypatch.setattr(client_module, "TelegramClient", fake_telegram_client)
+
+    assert create_client(settings) is sentinel
+
+
+def test_create_client_corrects_existing_session_permissions_before_open(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path / "runtime")
+    settings.session_file.parent.mkdir(parents=True)
+    settings.session_file.parent.chmod(0o755)
+    settings.session_file.write_bytes(b"existing-session")
+    settings.session_file.chmod(0o644)
+
+    def fake_telegram_client(session_name, api_id, api_hash):
+        assert S_IMODE(settings.session_file.parent.stat().st_mode) == 0o700
+        assert S_IMODE(settings.session_file.stat().st_mode) == 0o600
+        return object()
+
+    monkeypatch.setattr(client_module, "TelegramClient", fake_telegram_client)
+
+    create_client(settings)
 
 
 def test_payload_helpers_return_only_safe_fields():
@@ -248,6 +286,7 @@ class FakeStatusClient:
 
 def test_collect_status_includes_bounded_identity_and_disconnects(tmp_path, monkeypatch):
     settings = make_settings(tmp_path)
+    settings.session_file.touch()
     me = SimpleNamespace(
         id=42,
         username="example",
@@ -273,6 +312,7 @@ def test_collect_status_includes_bounded_identity_and_disconnects(tmp_path, monk
 
 def test_collect_status_disconnects_when_connect_fails(tmp_path, monkeypatch):
     settings = make_settings(tmp_path)
+    settings.session_file.touch()
     client = FakeStatusClient(connect_error=RuntimeError("offline"))
     monkeypatch.setattr(status, "create_client", lambda current: client)
 
@@ -290,6 +330,22 @@ def test_collect_status_with_missing_credentials_does_not_create_client(tmp_path
         lambda current: pytest.fail("client must not be created without credentials"),
     )
     assert asyncio.run(collect_status(settings))["authorized"] is False
+
+
+def test_collect_status_with_missing_session_is_non_mutating(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path / "runtime")
+    monkeypatch.setattr(
+        status,
+        "create_client",
+        lambda current: pytest.fail("status must not create a client without a session"),
+    )
+
+    payload = asyncio.run(collect_status(settings))
+
+    assert payload["authorized"] is False
+    assert payload["session_exists"] is False
+    assert not settings.session_file.exists()
+    assert not settings.session_file.parent.exists()
 
 
 def test_status_main_uses_portable_env_file_and_prints_utf8_json(tmp_path, monkeypatch, capsys):
@@ -312,8 +368,9 @@ def test_status_main_uses_portable_env_file_and_prints_utf8_json(tmp_path, monke
 
 
 class FakeAuthClient:
-    def __init__(self, me):
+    def __init__(self, me, session_file=None):
         self.me = me
+        self.session_file = session_file
         self.entered = False
         self.exited = False
 
@@ -323,6 +380,10 @@ class FakeAuthClient:
 
     async def __aexit__(self, exc_type, exc, traceback):
         self.exited = True
+        if self.session_file is not None:
+            self.session_file.parent.mkdir(parents=True, exist_ok=True)
+            self.session_file.touch(exist_ok=True)
+            self.session_file.chmod(0o644)
 
     async def get_me(self):
         return self.me
@@ -340,4 +401,24 @@ def test_authorize_uses_portable_env_file_and_prints_bounded_identity(tmp_path, 
 
     assert client.entered is True
     assert client.exited is True
+    assert capsys.readouterr().out == "authorized user_id=42 username=example\n"
+
+
+def test_authorize_reasserts_session_permissions_after_interactive_client_exit(
+    tmp_path, monkeypatch, capsys
+):
+    env_file = tmp_path / "runtime" / "telegram.env"
+    settings = make_settings(env_file.parent)
+    client = FakeAuthClient(
+        SimpleNamespace(id=42, username="example"),
+        session_file=settings.session_file,
+    )
+    monkeypatch.setattr(auth, "resolve_env_file", lambda: env_file)
+    monkeypatch.setattr(auth, "load_settings", lambda path: settings)
+    monkeypatch.setattr(auth, "create_client", lambda current: client)
+
+    asyncio.run(auth.authorize())
+
+    assert S_IMODE(settings.session_file.parent.stat().st_mode) == 0o700
+    assert S_IMODE(settings.session_file.stat().st_mode) == 0o600
     assert capsys.readouterr().out == "authorized user_id=42 username=example\n"

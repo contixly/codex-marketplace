@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any
 
-from telegram_mcp.client import create_client
+from telegram_mcp.client import create_client, secure_session_file
 from telegram_mcp.config import TelegramSettings, load_settings, resolve_env_file
 
 
@@ -30,7 +30,11 @@ def build_status_payload(
 
 
 async def collect_status(settings: TelegramSettings) -> dict[str, Any]:
-    if settings.api_id is None or not settings.api_hash:
+    if (
+        settings.api_id is None
+        or not settings.api_hash
+        or not settings.session_file.exists()
+    ):
         return build_status_payload(settings, authorized=False)
 
     client = create_client(settings)
@@ -40,7 +44,10 @@ async def collect_status(settings: TelegramSettings) -> dict[str, Any]:
         me = _me_to_payload(await client.get_me()) if authorized else None
         return build_status_payload(settings, authorized=authorized, me=me)
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        finally:
+            secure_session_file(settings)
 
 
 def main() -> None:

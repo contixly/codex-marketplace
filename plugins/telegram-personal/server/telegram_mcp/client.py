@@ -16,7 +16,16 @@ DIALOG_FIELDS = {"name", "id", "username", "entity_type", "unread_count"}
 def create_client(settings: TelegramSettings) -> TelegramClient:
     if settings.api_id is None or not settings.api_hash:
         raise RuntimeError("Telegram API credentials are missing. Run the plugin setup first.")
+    secure_session_file(settings)
     return TelegramClient(settings.session_name, settings.api_id, settings.api_hash)
+
+
+def secure_session_file(settings: TelegramSettings) -> None:
+    session_file = settings.session_file
+    session_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    session_file.parent.chmod(0o700)
+    session_file.touch(mode=0o600, exist_ok=True)
+    session_file.chmod(0o600)
 
 
 def entity_label(entity: Any) -> str:
