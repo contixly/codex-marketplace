@@ -1,0 +1,26 @@
+{
+  "name": "telegram-personal",
+  "version": "0.1.0",
+  "description": "Use a private Telegram user account from Codex through a confirmation-gated local MCP server.",
+  "author": {
+    "name": "Contixly"
+  },
+  "repository": "https://github.com/contixly/codex-marketplace",
+  "license": "MIT",
+  "keywords": ["telegram", "telethon", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Telegram Personal",
+    "shortDescription": "Safely read and send Telegram messages from Codex",
+    "longDescription": "Connect a private Telegram user account locally, read dialogs and media, and require explicit confirmation before every send.",
+    "developerName": "Contixly",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Set up my Telegram account for Codex.",
+      "Show my latest Telegram dialogs.",
+      "Prepare a Telegram message for confirmation."
+    ]
+  }
+}
