@@ -20,15 +20,21 @@ from telegram_mcp.outbound import (
 )
 
 
-def test_action_is_exact_single_use_and_typed():
+def test_action_is_exact_single_use_typed_and_account_bound():
     store = PreparedActionStore(
         confirmation_prefix="CONFIRM_SEND_TELEGRAM_MESSAGE",
         ttl_seconds=300,
         clock=lambda: 1000.0,
         token_factory=lambda _: "action-1",
     )
-    prepared = store.prepare(action="message", recipient="chat", text="hello")
+    prepared = store.prepare(
+        action="message",
+        account_id=123,
+        recipient="chat",
+        text="hello",
+    )
     assert prepared.confirmation == "CONFIRM_SEND_TELEGRAM_MESSAGE action-1"
+    assert prepared.account_id == 123
     consumed = store.consume(
         action_id="action-1",
         confirmation=prepared.confirmation,
@@ -51,7 +57,12 @@ def test_expired_action_is_rejected():
         clock=lambda: now[0],
         token_factory=lambda _: "action-2",
     )
-    prepared = store.prepare(action="message", recipient="chat", text="hello")
+    prepared = store.prepare(
+        action="message",
+        account_id=123,
+        recipient="chat",
+        text="hello",
+    )
     now[0] = 1300.0
     with pytest.raises(PermissionError, match="prepared action"):
         store.consume(
@@ -63,11 +74,38 @@ def test_expired_action_is_rejected():
 
 def test_image_validation_hashes_supported_content(tmp_path):
     image = tmp_path / "image.png"
-    image.write_bytes(bytes.fromhex("89504e470d0a1a0a") + b"payload")
-    validated = validate_image_file(str(image), max_bytes=1024)
+    content = bytes.fromhex("89504e470d0a1a0a") + b"payload"
+    image.write_bytes(content)
+    validated, exact_bytes = outbound_module.read_validated_image_file(
+        str(image),
+        max_bytes=1024,
+    )
     assert validated.media_type == "image/png"
     assert validated.size_bytes == image.stat().st_size
     assert len(validated.sha256) == 64
+    assert exact_bytes == content
+    assert validate_image_file(str(image), max_bytes=1024) == validated
+
+
+def test_validate_image_file_delegates_to_exact_byte_reader(tmp_path, monkeypatch):
+    image = tmp_path / "image.png"
+    image.write_bytes(b"unused")
+    validated = ValidatedImage(
+        path=image,
+        media_type="image/png",
+        sha256="a" * 64,
+        size_bytes=42,
+    )
+    calls = []
+
+    def fake_reader(image_path, *, max_bytes=None):
+        calls.append((image_path, max_bytes))
+        return validated, b"exact bytes"
+
+    monkeypatch.setattr(outbound_module, "read_validated_image_file", fake_reader)
+
+    assert validate_image_file(str(image), max_bytes=123) is validated
+    assert calls == [(str(image), 123)]
 
 
 def test_empty_and_oversized_messages_are_rejected():
@@ -83,7 +121,12 @@ def test_failed_action_checks_do_not_consume_prepared_action():
         clock=lambda: 1000.0,
         token_factory=lambda _: "action-3",
     )
-    prepared = store.prepare(action="message", recipient="chat", text="hello")
+    prepared = store.prepare(
+        action="message",
+        account_id=123,
+        recipient="chat",
+        text="hello",
+    )
 
     with pytest.raises(PermissionError, match="prepared action"):
         store.consume(
@@ -113,8 +156,13 @@ def test_action_ids_retry_collisions_and_records_are_immutable():
         token_factory=lambda size: next(tokens) if size == 18 else "wrong-size",
     )
 
-    first = store.prepare(action="message", recipient="chat", text="first")
-    second = store.prepare(action="photo", recipient="chat")
+    first = store.prepare(
+        action="message",
+        account_id=123,
+        recipient="chat",
+        text="first",
+    )
+    second = store.prepare(action="photo", account_id=123, recipient="chat")
 
     assert (first.action_id, second.action_id) == ("same", "unique")
     with pytest.raises(FrozenInstanceError):

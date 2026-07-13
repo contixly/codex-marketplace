@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any, AsyncIterator
 
 from mcp.server.fastmcp import FastMCP
@@ -24,6 +25,7 @@ from telegram_mcp.outbound import (
     PreparedAction,
     PreparedActionStore,
     image_payload_summary,
+    read_validated_image_file,
     validate_caption,
     validate_image_file,
     validate_message_text,
@@ -80,6 +82,25 @@ def _prepared_response(prepared: PreparedAction, summary: str) -> dict[str, str]
             tz=timezone.utc,
         ).isoformat(),
     }
+
+
+def _stable_account_id(account: Any) -> int:
+    account_id = getattr(account, "id", None)
+    if (
+        not isinstance(account_id, int)
+        or isinstance(account_id, bool)
+        or account_id < 1
+    ):
+        raise RuntimeError("Telegram account identity is unavailable.")
+    return account_id
+
+
+async def _require_prepared_account(client: Any, prepared: PreparedAction) -> None:
+    current_account_id = _stable_account_id(await client.get_me())
+    if current_account_id != prepared.account_id:
+        raise PermissionError(
+            "The connected Telegram account does not match the prepared action."
+        )
 
 
 def _consume_prepared_action(
@@ -190,6 +211,7 @@ async def prepare_send_message(recipient: str, text: str) -> dict[str, str]:
     async with _connected_client(settings) as client:
         account = await client.get_me()
         resolved_recipient = await resolve_entity(client, selected_recipient)
+    account_id = _stable_account_id(account)
 
     summary = build_action_summary(
         account_label=entity_label(account),
@@ -199,6 +221,7 @@ async def prepare_send_message(recipient: str, text: str) -> dict[str, str]:
     )
     prepared = prepared_actions.prepare(
         action="message",
+        account_id=account_id,
         recipient=resolved_recipient,
         text=selected_text,
     )
@@ -221,6 +244,7 @@ async def send_message(
 
     settings = _load_settings()
     async with _connected_client(settings) as client:
+        await _require_prepared_account(client, prepared)
         return await client_send_message(
             client,
             prepared.recipient,
@@ -246,6 +270,7 @@ async def prepare_send_photo(
     async with _connected_client(settings) as client:
         account = await client.get_me()
         resolved_recipient = await resolve_entity(client, selected_recipient)
+    account_id = _stable_account_id(account)
 
     summary = build_action_summary(
         account_label=entity_label(account),
@@ -255,6 +280,7 @@ async def prepare_send_photo(
     )
     prepared = prepared_actions.prepare(
         action="photo",
+        account_id=account_id,
         recipient=resolved_recipient,
         text=selected_caption,
         image=image,
@@ -277,7 +303,7 @@ async def send_photo(
         raise PermissionError("The prepared Telegram photo payload is missing.")
 
     settings = _load_settings()
-    current_image = validate_image_file(
+    current_image, image_bytes = read_validated_image_file(
         str(prepared.image.path),
         max_bytes=settings.upload_max_bytes,
     )
@@ -286,13 +312,16 @@ async def send_photo(
             "The Telegram image changed after preparation; prepare it again."
         )
 
-    async with _connected_client(settings) as client:
-        return await client_send_photo(
-            client,
-            prepared.recipient,
-            str(current_image.path),
-            prepared.text,
-        )
+    with BytesIO(image_bytes) as image_file:
+        image_file.name = current_image.path.name
+        async with _connected_client(settings) as client:
+            await _require_prepared_account(client, prepared)
+            return await client_send_photo(
+                client,
+                prepared.recipient,
+                image_file,
+                prepared.text,
+            )
 
 
 def main() -> None:

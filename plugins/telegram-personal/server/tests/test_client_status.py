@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from io import BytesIO
 from stat import S_IMODE
 from types import SimpleNamespace
 
@@ -249,15 +250,17 @@ def test_download_media_rejects_missing_or_medialess_messages(tmp_path, message,
 def test_send_helpers_return_safe_payloads_and_send_photo_as_photo():
     message = SimpleNamespace(id=7, date=None, sender_id=8, text="sent", media=object())
     client = FakeOperations(messages=[message])
+    image_file = BytesIO(b"exact photo bytes")
+    image_file.name = "photo.jpg"
 
     assert asyncio.run(send_message(client, "example", "hello")) == message_to_payload(message)
-    assert asyncio.run(send_photo(client, "example", "/tmp/photo.jpg", "caption")) == message_to_payload(
+    assert asyncio.run(send_photo(client, "example", image_file, "caption")) == message_to_payload(
         message
     )
     assert client.send_message_call == ("entity:example", "hello")
     assert client.send_file_call == (
         "entity:example",
-        {"file": "/tmp/photo.jpg", "caption": "caption", "force_document": False},
+        {"file": image_file, "caption": "caption", "force_document": False},
     )
 
 

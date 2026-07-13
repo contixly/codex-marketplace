@@ -32,18 +32,24 @@ def make_settings(tmp_path):
 
 
 class FakeClient:
-    def __init__(self, *, account, recipient, sent_message=None):
+    def __init__(self, *, account, recipient, sent_message=None, on_connect=None):
         self.account = account
         self.recipient = recipient
         self.sent_message = sent_message
+        self.on_connect = on_connect
         self.connected = False
         self.disconnected = False
         self.get_entity_calls = []
         self.send_message_calls = []
         self.send_file_calls = []
+        self.uploaded_bytes = None
+        self.uploaded_filename = None
+        self.uploaded_file_was_path = None
 
     async def connect(self):
         self.connected = True
+        if self.on_connect is not None:
+            self.on_connect()
 
     async def disconnect(self):
         self.disconnected = True
@@ -61,6 +67,11 @@ class FakeClient:
 
     async def send_file(self, recipient, **kwargs):
         self.send_file_calls.append((recipient, kwargs))
+        image_file = kwargs["file"]
+        self.uploaded_file_was_path = isinstance(image_file, (str, bytes))
+        if not self.uploaded_file_was_path:
+            self.uploaded_bytes = image_file.read()
+            self.uploaded_filename = image_file.name
         return self.sent_message
 
 
@@ -234,6 +245,30 @@ def test_message_send_happens_once_and_replay_fails_before_a_second_connection(
     assert send_client.send_message_calls == [(recipient, "  exact message  ")]
 
 
+def test_message_send_rejects_a_different_connected_account(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path)
+    prepared_account = SimpleNamespace(id=1, username="account")
+    current_account = SimpleNamespace(id=999, username="other-account")
+    recipient = SimpleNamespace(id=2, username="recipient", title="Example Team")
+    prepare_client = FakeClient(account=prepared_account, recipient=recipient)
+    send_client = FakeClient(account=current_account, recipient=recipient)
+    install_runtime(monkeypatch, settings, [prepare_client, send_client])
+    install_deterministic_action_store(monkeypatch)
+    prepared = asyncio.run(server.prepare_send_message("@recipient", "message"))
+
+    with pytest.raises(PermissionError, match="account"):
+        asyncio.run(
+            server.send_message(
+                prepared_action_id=prepared["prepared_action_id"],
+                confirmation=prepared["confirmation_required"],
+            )
+        )
+
+    assert send_client.connected is True
+    assert send_client.disconnected is True
+    assert send_client.send_message_calls == []
+
+
 def test_changed_image_hash_prevents_photo_send_before_connecting(
     tmp_path, monkeypatch
 ):
@@ -277,3 +312,77 @@ def test_changed_image_hash_prevents_photo_send_before_connecting(
     assert load_calls == [settings.env_file, settings.env_file]
     assert send_client.connected is False
     assert send_client.send_file_calls == []
+
+
+def test_photo_send_rejects_a_different_connected_account(tmp_path, monkeypatch):
+    settings = make_settings(tmp_path)
+    image = tmp_path / "photo.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nprepared")
+    prepared_account = SimpleNamespace(id=1, username="account")
+    current_account = SimpleNamespace(id=999, username="other-account")
+    recipient = SimpleNamespace(id=2, username="recipient", title="Example Team")
+    prepare_client = FakeClient(account=prepared_account, recipient=recipient)
+    send_client = FakeClient(account=current_account, recipient=recipient)
+    install_runtime(monkeypatch, settings, [prepare_client, send_client])
+    install_deterministic_action_store(monkeypatch)
+    prepared = asyncio.run(
+        server.prepare_send_photo("@recipient", str(image), "caption")
+    )
+
+    with pytest.raises(PermissionError, match="account"):
+        asyncio.run(
+            server.send_photo(
+                prepared_action_id=prepared["prepared_action_id"],
+                confirmation=prepared["confirmation_required"],
+            )
+        )
+
+    assert send_client.connected is True
+    assert send_client.disconnected is True
+    assert send_client.send_file_calls == []
+
+
+def test_photo_send_uploads_validated_bytes_when_path_changes_during_connect(
+    tmp_path, monkeypatch
+):
+    settings = make_settings(tmp_path)
+    image = tmp_path / "photo.png"
+    prepared_bytes = b"\x89PNG\r\n\x1a\nprepared"
+    changed_bytes = b"\x89PNG\r\n\x1a\nchanged-after-validation"
+    image.write_bytes(prepared_bytes)
+    account = SimpleNamespace(id=1, username="account")
+    recipient = SimpleNamespace(id=2, username="recipient", title="Example Team")
+    sent = SimpleNamespace(
+        id=10,
+        date=None,
+        sender_id=1,
+        text="caption",
+        media=object(),
+    )
+    prepare_client = FakeClient(account=account, recipient=recipient)
+    send_client = FakeClient(
+        account=account,
+        recipient=recipient,
+        sent_message=sent,
+        on_connect=lambda: image.write_bytes(changed_bytes),
+    )
+    install_runtime(monkeypatch, settings, [prepare_client, send_client])
+    install_deterministic_action_store(monkeypatch)
+    prepared = asyncio.run(
+        server.prepare_send_photo("@recipient", str(image), "caption")
+    )
+
+    payload = asyncio.run(
+        server.send_photo(
+            prepared_action_id=prepared["prepared_action_id"],
+            confirmation=prepared["confirmation_required"],
+        )
+    )
+
+    assert payload["id"] == 10
+    assert image.read_bytes() == changed_bytes
+    assert send_client.uploaded_file_was_path is False
+    assert send_client.uploaded_bytes == prepared_bytes
+    assert send_client.uploaded_filename == "photo.png"
+    assert send_client.send_file_calls[0][1]["caption"] == "caption"
+    assert send_client.send_file_calls[0][1]["force_document"] is False

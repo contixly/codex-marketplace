@@ -35,6 +35,7 @@ class ValidatedImage:
 class PreparedAction:
     action_id: str
     action: str
+    account_id: int
     recipient: Any
     text: str | None
     image: ValidatedImage | None
@@ -62,6 +63,7 @@ class PreparedActionStore:
         self,
         *,
         action: str,
+        account_id: int,
         recipient: Any,
         text: str | None = None,
         image: ValidatedImage | None = None,
@@ -72,6 +74,7 @@ class PreparedActionStore:
             prepared = PreparedAction(
                 action_id=action_id,
                 action=action,
+                account_id=account_id,
                 recipient=recipient,
                 text=text,
                 image=image,
@@ -161,6 +164,15 @@ def validate_image_file(
     *,
     max_bytes: int | None = None,
 ) -> ValidatedImage:
+    validated, _ = read_validated_image_file(image_path, max_bytes=max_bytes)
+    return validated
+
+
+def read_validated_image_file(
+    image_path: str,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[ValidatedImage, bytes]:
     if not isinstance(image_path, str) or not image_path.strip():
         raise ValueError("Telegram image path must be non-empty.")
 
@@ -193,6 +205,7 @@ def validate_image_file(
         descriptor = None
         with source:
             header = bytearray()
+            content = bytearray()
             digest = hashlib.sha256()
             size_bytes = 0
             for chunk in iter(lambda: source.read(1024 * 1024), b""):
@@ -202,6 +215,7 @@ def validate_image_file(
                         "Telegram image exceeds the configured "
                         f"{max_bytes}-byte upload limit."
                     )
+                content.extend(chunk)
                 if len(header) < 16:
                     header.extend(chunk[: 16 - len(header)])
                 digest.update(chunk)
@@ -225,11 +239,14 @@ def validate_image_file(
             "Telegram image must use a supported image format: PNG, JPEG, GIF, or WebP."
         )
 
-    return ValidatedImage(
-        path=path,
-        media_type=media_type,
-        sha256=digest.hexdigest(),
-        size_bytes=size_bytes,
+    return (
+        ValidatedImage(
+            path=path,
+            media_type=media_type,
+            sha256=digest.hexdigest(),
+            size_bytes=size_bytes,
+        ),
+        bytes(content),
     )
 
 

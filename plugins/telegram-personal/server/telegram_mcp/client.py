@@ -151,13 +151,13 @@ async def send_message(client: Any, recipient: Any, text: str) -> dict[str, Any]
 async def send_photo(
     client: Any,
     recipient: Any,
-    image_path: str,
+    image_file: Any,
     caption: str | None,
 ) -> dict[str, Any]:
     entity = await resolve_entity(client, recipient)
     sent_message = await client.send_file(
         entity,
-        file=image_path,
+        file=image_file,
         caption=caption,
         force_document=False,
     )
