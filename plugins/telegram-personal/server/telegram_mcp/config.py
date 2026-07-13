@@ -64,11 +64,12 @@ class TelegramSettings:
 def load_settings(env_file: str | Path | None = None) -> TelegramSettings:
     env_path = Path(env_file) if env_file is not None else resolve_env_file()
     env_path = env_path.expanduser()
-    values = _read_dotenv(env_path)
     data_dir = env_path.parent
+    _ensure_private_directory(data_dir)
+    values = _read_dotenv(env_path)
     session_name = values.get("TELEGRAM_SESSION_NAME") or str(data_dir / "personal")
     downloads_dir = Path(values.get("TELEGRAM_DOWNLOADS_DIR") or data_dir / "downloads").expanduser()
-    downloads_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_private_directory(downloads_dir)
     return TelegramSettings(
         env_file=env_path,
         api_id=_optional_int(values.get("TELEGRAM_API_ID")),
@@ -81,6 +82,11 @@ def load_settings(env_file: str | Path | None = None) -> TelegramSettings:
         message_limit_max=_int_or_default(values.get("TELEGRAM_MESSAGE_LIMIT_MAX"), DEFAULT_MESSAGE_LIMIT_MAX),
         upload_max_bytes=_positive_int_or_default(values.get("TELEGRAM_UPLOAD_MAX_BYTES"), DEFAULT_UPLOAD_MAX_BYTES),
     )
+
+
+def _ensure_private_directory(path: Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.chmod(0o700)
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:

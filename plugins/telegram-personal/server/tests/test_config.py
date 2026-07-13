@@ -1,4 +1,5 @@
 from pathlib import Path
+from stat import S_IMODE
 
 from telegram_mcp.config import (
     TelegramSettings,
@@ -30,6 +31,29 @@ def test_load_settings_uses_portable_defaults(tmp_path):
     assert settings.session_name == str(env_file.parent / "personal")
     assert settings.downloads_dir == env_file.parent / "downloads"
     assert settings.message_limit_max == 100
+
+
+def test_load_settings_creates_private_runtime_directories(tmp_path):
+    env_file = tmp_path / "runtime/telegram.env"
+
+    settings = load_settings(env_file)
+
+    assert S_IMODE(env_file.parent.stat().st_mode) == 0o700
+    assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
+
+
+def test_load_settings_restricts_existing_runtime_directories(tmp_path):
+    data_dir = tmp_path / "runtime"
+    downloads_dir = data_dir / "downloads"
+    downloads_dir.mkdir(parents=True)
+    data_dir.chmod(0o755)
+    downloads_dir.chmod(0o755)
+    env_file = data_dir / "telegram.env"
+
+    settings = load_settings(env_file)
+
+    assert S_IMODE(data_dir.stat().st_mode) == 0o700
+    assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
 
 
 def test_settings_repr_redacts_hash(tmp_path):
