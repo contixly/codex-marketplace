@@ -32,6 +32,18 @@ def test_load_settings_uses_portable_defaults(tmp_path):
     assert settings.session_name == str(env_file.parent / "personal")
     assert settings.downloads_dir == env_file.parent / "downloads"
     assert settings.message_limit_max == 100
+    assert settings.download_max_bytes == 20 * 1024 * 1024
+
+
+def test_load_settings_reads_positive_download_limit(tmp_path):
+    env_file = tmp_path / "runtime/telegram.env"
+    env_file.parent.mkdir()
+    env_file.write_text(
+        "TELEGRAM_DOWNLOAD_MAX_BYTES=4096\n",
+        encoding="utf-8",
+    )
+
+    assert load_settings(env_file).download_max_bytes == 4096
 
 
 def test_load_settings_is_non_mutating_when_runtime_is_absent(tmp_path):

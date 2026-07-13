@@ -10,6 +10,7 @@ DEFAULT_DIALOG_LIMIT = 50
 DEFAULT_MESSAGE_LIMIT = 20
 DEFAULT_MESSAGE_LIMIT_MAX = 100
 DEFAULT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+DEFAULT_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
 
 
 def resolve_codex_home(
@@ -55,6 +56,7 @@ class TelegramSettings:
     message_limit_default: int
     message_limit_max: int
     upload_max_bytes: int = DEFAULT_UPLOAD_MAX_BYTES
+    download_max_bytes: int = DEFAULT_DOWNLOAD_MAX_BYTES
 
     @property
     def api_hash_configured(self) -> bool:
@@ -79,6 +81,10 @@ def load_settings(env_file: str | Path | None = None) -> TelegramSettings:
         message_limit_default=_int_or_default(values.get("TELEGRAM_MESSAGE_LIMIT_DEFAULT"), DEFAULT_MESSAGE_LIMIT),
         message_limit_max=_int_or_default(values.get("TELEGRAM_MESSAGE_LIMIT_MAX"), DEFAULT_MESSAGE_LIMIT_MAX),
         upload_max_bytes=_positive_int_or_default(values.get("TELEGRAM_UPLOAD_MAX_BYTES"), DEFAULT_UPLOAD_MAX_BYTES),
+        download_max_bytes=_positive_int_or_default(
+            values.get("TELEGRAM_DOWNLOAD_MAX_BYTES"),
+            DEFAULT_DOWNLOAD_MAX_BYTES,
+        ),
     )
 
 

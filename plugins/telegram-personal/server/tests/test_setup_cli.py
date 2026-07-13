@@ -68,6 +68,7 @@ def test_write_credentials_sets_exact_defaults_and_restricts_existing_parent(tmp
         "TELEGRAM_MESSAGE_LIMIT_DEFAULT=20",
         "TELEGRAM_MESSAGE_LIMIT_MAX=100",
         "TELEGRAM_UPLOAD_MAX_BYTES=20971520",
+        "TELEGRAM_DOWNLOAD_MAX_BYTES=20971520",
     ]
     assert stat.S_IMODE(data_dir.stat().st_mode) == 0o700
 

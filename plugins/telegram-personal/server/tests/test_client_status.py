@@ -6,6 +6,7 @@ from stat import S_IMODE
 from types import SimpleNamespace
 
 import pytest
+from telethon import types
 
 from telegram_mcp import auth, client as client_module, status
 from telegram_mcp.client import (
@@ -25,7 +26,12 @@ from telegram_mcp.config import TelegramSettings
 from telegram_mcp.status import build_status_payload, collect_status
 
 
-def make_settings(tmp_path, api_id=12345, api_hash="test-hash"):
+def make_settings(
+    tmp_path,
+    api_id=12345,
+    api_hash="test-hash",
+    download_max_bytes=20 * 1024 * 1024,
+):
     return TelegramSettings(
         env_file=tmp_path / "telegram.env",
         api_id=api_id,
@@ -37,6 +43,7 @@ def make_settings(tmp_path, api_id=12345, api_hash="test-hash"):
         message_limit_default=20,
         message_limit_max=100,
         upload_max_bytes=20 * 1024 * 1024,
+        download_max_bytes=download_max_bytes,
     )
 
 
@@ -45,6 +52,7 @@ def test_status_redacts_credentials(tmp_path):
     payload = build_status_payload(settings, authorized=False)
     assert payload["api_id_configured"] is True
     assert payload["api_hash_configured"] is True
+    assert payload["limits"]["download_max_bytes"] == 20 * 1024 * 1024
     assert "test-hash" not in repr(payload)
 
 
@@ -222,7 +230,11 @@ def test_read_messages_resolves_recipient_and_honors_limit():
 
 
 def test_download_media_secures_runtime_directories_and_returns_absolute_path(tmp_path):
-    message = SimpleNamespace(id=7, media=object())
+    message = SimpleNamespace(
+        id=7,
+        media=object(),
+        file=SimpleNamespace(size=1024),
+    )
     client = FakeOperations(messages=[message])
     data_dir = tmp_path / "runtime"
     downloads_dir = data_dir / "downloads"
@@ -238,6 +250,107 @@ def test_download_media_secures_runtime_directories_and_returns_absolute_path(tm
     assert S_IMODE(settings.downloads_dir.stat().st_mode) == 0o700
     assert client.download_file == str(settings.downloads_dir)
     assert path == str(client.downloaded_path.resolve())
+
+
+def test_download_media_rejects_oversized_media_before_writing(tmp_path):
+    message = SimpleNamespace(
+        id=7,
+        media=object(),
+        file=SimpleNamespace(size=11),
+    )
+    client = FakeOperations(messages=[message])
+    client.downloaded_path = tmp_path / "downloads" / "large.bin"
+    settings = make_settings(tmp_path, download_max_bytes=10)
+
+    with pytest.raises(RuntimeError, match="11 bytes exceeds the configured 10-byte"):
+        asyncio.run(download_media(client, settings, "example", 7))
+
+    assert client.download_file is None
+    assert not settings.downloads_dir.exists()
+
+
+def test_download_media_checks_the_video_variant_telethon_selects_for_photos(tmp_path):
+    photo = types.Photo(
+        id=1,
+        access_hash=2,
+        file_reference=b"reference",
+        date=None,
+        sizes=[types.PhotoSize(type="x", w=100, h=100, size=5)],
+        dc_id=4,
+        video_sizes=[types.VideoSize(type="v", w=100, h=100, size=11)],
+    )
+    message = SimpleNamespace(
+        id=7,
+        media=types.MessageMediaPhoto(photo=photo),
+        file=SimpleNamespace(size=5),
+        photo=photo,
+    )
+    client = FakeOperations(messages=[message])
+    client.downloaded_path = tmp_path / "downloads" / "animated.mp4"
+    settings = make_settings(tmp_path, download_max_bytes=10)
+
+    with pytest.raises(RuntimeError, match="11 bytes exceeds the configured 10-byte"):
+        asyncio.run(download_media(client, settings, "example", 7))
+
+    assert client.download_file is None
+    assert not settings.downloads_dir.exists()
+
+
+def test_download_media_checks_document_before_photo_in_web_previews(tmp_path):
+    photo = types.Photo(
+        id=1,
+        access_hash=2,
+        file_reference=b"photo-reference",
+        date=None,
+        sizes=[types.PhotoSize(type="x", w=100, h=100, size=5)],
+        dc_id=4,
+    )
+    document = types.Document(
+        id=3,
+        access_hash=4,
+        file_reference=b"document-reference",
+        date=None,
+        mime_type="application/octet-stream",
+        size=11,
+        dc_id=4,
+        attributes=[],
+    )
+    webpage = types.WebPage(
+        id=5,
+        url="https://example.invalid",
+        display_url="example.invalid",
+        hash=0,
+        photo=photo,
+        document=document,
+    )
+    message = SimpleNamespace(
+        id=7,
+        media=types.MessageMediaWebPage(webpage=webpage),
+        file=SimpleNamespace(size=5),
+        photo=photo,
+    )
+    client = FakeOperations(messages=[message])
+    client.downloaded_path = tmp_path / "downloads" / "preview.bin"
+    settings = make_settings(tmp_path, download_max_bytes=10)
+
+    with pytest.raises(RuntimeError, match="11 bytes exceeds the configured 10-byte"):
+        asyncio.run(download_media(client, settings, "example", 7))
+
+    assert client.download_file is None
+    assert not settings.downloads_dir.exists()
+
+
+def test_download_media_rejects_unknown_size_before_writing(tmp_path):
+    message = SimpleNamespace(id=7, media=object(), file=None)
+    client = FakeOperations(messages=[message])
+    client.downloaded_path = tmp_path / "downloads" / "unknown.bin"
+    settings = make_settings(tmp_path)
+
+    with pytest.raises(RuntimeError, match="size is unavailable"):
+        asyncio.run(download_media(client, settings, "example", 7))
+
+    assert client.download_file is None
+    assert not settings.downloads_dir.exists()
 
 
 @pytest.mark.parametrize(

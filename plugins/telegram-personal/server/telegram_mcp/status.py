@@ -25,6 +25,7 @@ def build_status_payload(
             "dialog_limit_default": settings.dialog_limit_default,
             "message_limit_default": settings.message_limit_default,
             "message_limit_max": settings.message_limit_max,
+            "download_max_bytes": settings.download_max_bytes,
         },
     }
 

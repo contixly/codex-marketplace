@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from telethon import TelegramClient
+from telethon import TelegramClient, types
 
 from telegram_mcp.config import TelegramSettings, ensure_runtime_directories
 
@@ -135,11 +135,74 @@ async def download_media(
     if not getattr(message, "media", None):
         raise RuntimeError(f"Telegram message {message_id} has no media to download.")
 
+    media_size = _selected_download_size(message)
+    if (
+        not isinstance(media_size, int)
+        or isinstance(media_size, bool)
+        or media_size < 0
+    ):
+        raise RuntimeError(
+            f"Telegram media size is unavailable for message {message_id}; "
+            "refusing an unbounded download."
+        )
+    if media_size > settings.download_max_bytes:
+        raise RuntimeError(
+            f"Telegram media size {media_size} bytes exceeds the configured "
+            f"{settings.download_max_bytes}-byte download limit."
+        )
+
     ensure_runtime_directories(settings)
     path = await client.download_media(message, file=str(settings.downloads_dir))
     if not path:
         raise RuntimeError(f"Telegram media download failed for message {message_id}.")
     return str(Path(path).expanduser().resolve())
+
+
+def _selected_download_size(message: Any) -> int | None:
+    media = getattr(message, "media", None)
+    if isinstance(media, types.MessageMediaWebPage):
+        webpage = getattr(media, "webpage", None)
+        if isinstance(webpage, types.WebPage):
+            media = webpage.document or webpage.photo
+        else:
+            media = None
+    elif isinstance(media, types.MessageMediaPhoto):
+        media = media.photo
+    elif isinstance(media, types.MessageMediaDocument):
+        media = media.document
+
+    if isinstance(media, types.Photo):
+        return _selected_photo_download_size(
+            media,
+            fallback=getattr(getattr(message, "file", None), "size", None),
+        )
+    if isinstance(
+        media,
+        (types.Document, types.WebDocument, types.WebDocumentNoProxy),
+    ):
+        return getattr(media, "size", None)
+    return getattr(getattr(message, "file", None), "size", None)
+
+
+def _selected_photo_download_size(
+    photo: types.Photo,
+    *,
+    fallback: int | None,
+) -> int | None:
+    # Telethon prefers VideoSize variants over static photo sizes when thumb=None.
+    video_sizes = [
+        getattr(variant, "size", None)
+        for variant in (photo.video_sizes or ())
+        if isinstance(variant, types.VideoSize)
+    ]
+    if video_sizes:
+        if any(
+            not isinstance(size, int) or isinstance(size, bool) or size < 0
+            for size in video_sizes
+        ):
+            return None
+        return max(video_sizes)
+    return fallback
 
 
 async def send_message(client: Any, recipient: Any, text: str) -> dict[str, Any]:
