@@ -82,4 +82,4 @@ Run commands from the installed plugin root in an interactive local terminal.
 | A question, clarification, or any other non-approval follows a prepared summary | Do not send or reconfirm the old action. Prepare again, show the new complete summary, and accept approval only in the immediately following user turn. |
 | A prepared action expired or was refused | Prepare again, show the new complete summary, and obtain fresh explicit confirmation in the immediately following user turn. |
 
-If `scripts/setup --reconfigure` replaces credentials, Telegram authorization must be completed again. Never delete the whole runtime directory as routine troubleshooting: doing so logs out this local integration.
+`scripts/setup --reconfigure` replaces the API ID/hash but preserves `personal.session`. An already-authorized session may be reused without phone/code/2FA. To intentionally switch accounts, move `personal.session` to a private backup before authorization. Never delete the whole runtime directory as routine troubleshooting: doing so logs out this local integration.

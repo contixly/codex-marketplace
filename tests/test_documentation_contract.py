@@ -84,6 +84,16 @@ class DocumentationContractTests(unittest.TestCase):
             self.assertIn(required, text)
         self.assertIn("never commit", text.casefold())
 
+    def test_plugin_readme_explains_reconfiguration_session_behavior(self):
+        text = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for required in (
+            "`scripts/setup --reconfigure` replaces the API ID/hash but preserves `personal.session`.",
+            "An already-authorized session may be reused without phone/code/2FA.",
+            "To intentionally switch accounts, move `personal.session` to a private backup before authorization.",
+        ):
+            self.assertIn(required, text)
+        self.assertNotIn("Telegram authorization must be completed again", text)
+
 
 if __name__ == "__main__":
     unittest.main()
