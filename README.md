@@ -17,7 +17,7 @@ Restart Codex and open a new task after installation so Codex loads the new plug
 
 | Plugin | Version | Description |
 | --- | --- | --- |
-| `telegram-personal` | `0.1.0` | Connects a private Telegram account locally, with confirmation-gated sends. |
+| `telegram-personal` | `0.2.0` | Connects a private Telegram account locally, with confirmation-gated message, photo, and document sends. |
 
 ## Update
 

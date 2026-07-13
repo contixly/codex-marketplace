@@ -23,7 +23,7 @@ class MarketplaceMetadataTests(unittest.TestCase):
     def test_plugin_manifest_exposes_skill_and_mcp(self):
         payload = json.loads((PLUGIN_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["name"], "telegram-personal")
-        self.assertEqual(payload["version"], "0.1.0")
+        self.assertEqual(payload["version"], "0.2.0")
         self.assertEqual(payload["author"]["name"], "Contixly")
         self.assertEqual(payload["skills"], "./skills/")
         self.assertEqual(payload["mcpServers"], "./.mcp.json")
