@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import os
 import secrets
 import stat
@@ -24,6 +25,14 @@ SIGNATURES = {
 
 
 @dataclass(frozen=True)
+class ValidatedFile:
+    path: Path
+    media_type: str
+    sha256: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
 class ValidatedImage:
     path: Path
     media_type: str
@@ -39,6 +48,7 @@ class PreparedAction:
     recipient: Any
     text: str | None
     image: ValidatedImage | None
+    document: ValidatedFile | None
     confirmation: str
     expires_at: float
 
@@ -67,6 +77,7 @@ class PreparedActionStore:
         recipient: Any,
         text: str | None = None,
         image: ValidatedImage | None = None,
+        document: ValidatedFile | None = None,
     ) -> PreparedAction:
         with self._lock:
             self._discard_expired()
@@ -78,6 +89,7 @@ class PreparedActionStore:
                 recipient=recipient,
                 text=text,
                 image=image,
+                document=document,
                 confirmation=f"{self._confirmation_prefix} {action_id}",
                 expires_at=self._clock() + self._ttl_seconds,
             )
@@ -159,6 +171,40 @@ def validate_caption(caption: str | None) -> str | None:
     )
 
 
+def validate_document_file(
+    file_path: str,
+    *,
+    max_bytes: int | None = None,
+) -> ValidatedFile:
+    validated, _ = read_validated_document_file(file_path, max_bytes=max_bytes)
+    return validated
+
+
+def read_validated_document_file(
+    file_path: str,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[ValidatedFile, bytes]:
+    path, _header, content, sha256, size_bytes = _read_regular_file(
+        file_path,
+        kind="document",
+        max_bytes=max_bytes,
+    )
+    media_type = (
+        mimetypes.guess_type(path.name, strict=False)[0]
+        or "application/octet-stream"
+    )
+    return (
+        ValidatedFile(
+            path=path,
+            media_type=media_type,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        ),
+        content,
+    )
+
+
 def validate_image_file(
     image_path: str,
     *,
@@ -173,14 +219,44 @@ def read_validated_image_file(
     *,
     max_bytes: int | None = None,
 ) -> tuple[ValidatedImage, bytes]:
-    if not isinstance(image_path, str) or not image_path.strip():
-        raise ValueError("Telegram image path must be non-empty.")
+    path, header, content, sha256, size_bytes = _read_regular_file(
+        image_path,
+        kind="image",
+        max_bytes=max_bytes,
+    )
+    media_type = _media_type_from_header(header)
+    if media_type is None:
+        raise ValueError(
+            "Telegram image must use a supported image format: PNG, JPEG, GIF, or WebP."
+        )
 
-    path = Path(image_path).expanduser()
+    return (
+        ValidatedImage(
+            path=path,
+            media_type=media_type,
+            sha256=sha256,
+            size_bytes=size_bytes,
+        ),
+        content,
+    )
+
+
+def _read_regular_file(
+    raw_path: str,
+    *,
+    kind: str,
+    max_bytes: int | None,
+) -> tuple[Path, bytes, bytes, str, int]:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"Telegram {kind} path must be non-empty.")
+
+    path = Path(raw_path).expanduser()
     try:
         path = path.resolve(strict=True)
-    except OSError as error:
-        raise ValueError(f"Telegram image path cannot be resolved: {error}") from error
+    except (OSError, RuntimeError) as error:
+        raise ValueError(
+            f"Telegram {kind} path cannot be resolved: {error}"
+        ) from error
 
     descriptor: int | None = None
     try:
@@ -193,12 +269,15 @@ def read_validated_image_file(
         descriptor = os.open(path, flags)
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
-            raise ValueError("Telegram image path must reference a regular file.")
+            raise ValueError(
+                f"Telegram {kind} path must reference a regular file."
+            )
         if before.st_size <= 0:
-            raise ValueError("Telegram image file must not be empty.")
+            raise ValueError(f"Telegram {kind} file must not be empty.")
         if max_bytes is not None and before.st_size > max_bytes:
             raise ValueError(
-                f"Telegram image exceeds the configured {max_bytes}-byte upload limit."
+                f"Telegram {kind} exceeds the configured "
+                f"{max_bytes}-byte upload limit."
             )
 
         source = os.fdopen(descriptor, "rb")
@@ -212,7 +291,7 @@ def read_validated_image_file(
                 size_bytes += len(chunk)
                 if max_bytes is not None and size_bytes > max_bytes:
                     raise ValueError(
-                        "Telegram image exceeds the configured "
+                        f"Telegram {kind} exceeds the configured "
                         f"{max_bytes}-byte upload limit."
                     )
                 content.extend(chunk)
@@ -221,32 +300,26 @@ def read_validated_image_file(
                 digest.update(chunk)
             after = os.fstat(source.fileno())
     except OSError as error:
-        raise ValueError(f"Telegram image cannot be read: {error}") from error
+        raise ValueError(f"Telegram {kind} cannot be read: {error}") from error
     finally:
         if descriptor is not None:
             os.close(descriptor)
 
     if size_bytes <= 0:
-        raise ValueError("Telegram image file must not be empty.")
-    if size_bytes != after.st_size or _descriptor_metadata(before) != _descriptor_metadata(
-        after
-    ):
-        raise ValueError("Telegram image changed during validation; prepare it again.")
-
-    media_type = _media_type_from_header(bytes(header))
-    if media_type is None:
+        raise ValueError(f"Telegram {kind} file must not be empty.")
+    if size_bytes != after.st_size or _descriptor_metadata(
+        before
+    ) != _descriptor_metadata(after):
         raise ValueError(
-            "Telegram image must use a supported image format: PNG, JPEG, GIF, or WebP."
+            f"Telegram {kind} changed during validation; prepare it again."
         )
 
     return (
-        ValidatedImage(
-            path=path,
-            media_type=media_type,
-            sha256=digest.hexdigest(),
-            size_bytes=size_bytes,
-        ),
+        path,
+        bytes(header),
         bytes(content),
+        digest.hexdigest(),
+        size_bytes,
     )
 
 
@@ -257,6 +330,23 @@ def image_payload_summary(image: ValidatedImage, caption: str | None) -> str:
             "media_type": image.media_type,
             "sha256": image.sha256,
             "size_bytes": image.size_bytes,
+            "caption": caption,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def document_payload_summary(
+    document: ValidatedFile,
+    caption: str | None,
+) -> str:
+    return json.dumps(
+        {
+            "filename": document.path.name,
+            "media_type": document.media_type,
+            "sha256": document.sha256,
+            "size_bytes": document.size_bytes,
             "caption": caption,
         },
         ensure_ascii=False,

@@ -11,9 +11,13 @@ from telegram_mcp import outbound as outbound_module
 from telegram_mcp.formatting import build_action_summary, clamp_limit
 from telegram_mcp.outbound import (
     PreparedActionStore,
+    ValidatedFile,
     ValidatedImage,
+    document_payload_summary,
     image_payload_summary,
+    read_validated_document_file,
     validate_caption,
+    validate_document_file,
     validate_image_file,
     validate_message_text,
     validate_recipient,
@@ -404,6 +408,180 @@ def test_image_payload_summaries_distinguish_same_metadata_with_different_hashes
     assert first_summary != second_summary
     assert json.loads(first_summary)["sha256"] == "a" * 64
     assert json.loads(second_summary)["sha256"] == "b" * 64
+
+
+def test_document_validation_captures_exact_bytes_metadata_and_safe_summary(tmp_path):
+    document = tmp_path / "intent.md"
+    contents = b"# Server notifications\nprivate body\n"
+    document.write_bytes(contents)
+
+    validated, exact_bytes = read_validated_document_file(
+        str(document),
+        max_bytes=1024,
+    )
+
+    assert validated == ValidatedFile(
+        path=document.resolve(),
+        media_type="text/markdown",
+        sha256=hashlib.sha256(contents).hexdigest(),
+        size_bytes=len(contents),
+    )
+    assert exact_bytes == contents
+    assert validate_document_file(str(document), max_bytes=1024) == validated
+    with pytest.raises(FrozenInstanceError):
+        validated.sha256 = "changed"
+
+    summary = document_payload_summary(validated, "  exact caption  ")
+    assert json.loads(summary) == {
+        "filename": "intent.md",
+        "media_type": "text/markdown",
+        "sha256": hashlib.sha256(contents).hexdigest(),
+        "size_bytes": len(contents),
+        "caption": "  exact caption  ",
+    }
+    assert "Server notifications" not in summary
+    assert "private body" not in summary
+
+
+def test_document_validation_uses_binary_mime_fallback(tmp_path):
+    document = tmp_path / "payload.codexunknown"
+    document.write_bytes(b"payload")
+
+    validated = validate_document_file(str(document))
+
+    assert validated.media_type == "application/octet-stream"
+
+
+def test_validate_document_file_delegates_to_exact_byte_reader(tmp_path, monkeypatch):
+    document = tmp_path / "intent.md"
+    document.write_bytes(b"unused")
+    validated = ValidatedFile(
+        path=document,
+        media_type="text/markdown",
+        sha256="a" * 64,
+        size_bytes=42,
+    )
+    calls = []
+
+    def fake_reader(file_path, *, max_bytes=None):
+        calls.append((file_path, max_bytes))
+        return validated, b"exact bytes"
+
+    monkeypatch.setattr(
+        outbound_module,
+        "read_validated_document_file",
+        fake_reader,
+    )
+
+    assert validate_document_file(str(document), max_bytes=123) is validated
+    assert calls == [(str(document), 123)]
+
+
+def test_document_validation_rejects_missing_directory_empty_and_oversized(tmp_path):
+    empty = tmp_path / "empty.txt"
+    empty.touch()
+    oversized = tmp_path / "oversized.bin"
+    oversized.write_bytes(b"too large")
+
+    with pytest.raises(ValueError, match="cannot be resolved"):
+        validate_document_file(str(tmp_path / "missing.bin"))
+    with pytest.raises(ValueError, match="regular file"):
+        validate_document_file(str(tmp_path))
+    with pytest.raises(ValueError, match="must not be empty"):
+        validate_document_file(str(empty))
+    with pytest.raises(ValueError, match="3-byte upload limit"):
+        validate_document_file(str(oversized), max_bytes=3)
+
+
+def test_document_validation_rejects_unreadable_file(tmp_path, monkeypatch):
+    document = tmp_path / "document.bin"
+    document.write_bytes(b"payload")
+    resolved = document.resolve()
+    real_open = outbound_module.os.open
+
+    def fail_for_document(path, flags, *args, **kwargs):
+        if Path(path) == resolved:
+            raise PermissionError("denied")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(outbound_module.os, "open", fail_for_document)
+
+    with pytest.raises(ValueError, match="cannot be read"):
+        validate_document_file(str(document))
+
+
+def test_document_validation_rejects_same_size_mutation_during_read(
+    tmp_path, monkeypatch
+):
+    document = tmp_path / "mutating.bin"
+    document.write_bytes(b"old")
+    initial = document.stat()
+
+    def replace_payload():
+        document.write_bytes(b"new")
+        os.utime(
+            document,
+            ns=(initial.st_atime_ns, initial.st_mtime_ns + 1_000_000_000),
+        )
+
+    _mutate_on_first_hash_update(monkeypatch, replace_payload)
+
+    with pytest.raises(ValueError, match="changed during validation"):
+        validate_document_file(str(document), max_bytes=1024)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX FIFOs")
+def test_document_validation_rejects_fifo_without_waiting_for_writer(tmp_path):
+    fifo = tmp_path / "document.bin"
+    os.mkfifo(fifo)
+    errors = []
+    completed = threading.Event()
+
+    def validate():
+        try:
+            validate_document_file(str(fifo), max_bytes=1024)
+        except Exception as error:
+            errors.append(error)
+        finally:
+            completed.set()
+
+    worker = threading.Thread(target=validate, daemon=True)
+    worker.start()
+    completed_without_writer = completed.wait(timeout=0.5)
+    if not completed_without_writer:
+        writer = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+        os.close(writer)
+        worker.join(timeout=0.5)
+
+    assert completed_without_writer
+    assert len(errors) == 1
+    assert isinstance(errors[0], ValueError)
+    assert "regular file" in str(errors[0])
+
+
+def test_prepared_action_store_keeps_validated_document(tmp_path):
+    document = ValidatedFile(
+        path=tmp_path / "intent.md",
+        media_type="text/markdown",
+        sha256="a" * 64,
+        size_bytes=42,
+    )
+    store = PreparedActionStore(
+        confirmation_prefix="CONFIRM_SEND_TELEGRAM_MESSAGE",
+        clock=lambda: 1000.0,
+        token_factory=lambda _: "document-action",
+    )
+
+    prepared = store.prepare(
+        action="document",
+        account_id=123,
+        recipient="chat",
+        text="caption",
+        document=document,
+    )
+
+    assert prepared.document is document
+    assert prepared.image is None
 
 
 def _mutate_on_first_hash_update(monkeypatch, mutation):
