@@ -1,0 +1,12 @@
+.DS_Store
+.worktrees/
+.superpowers/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.venv/
+work/
+downloads/
+*.session
+*.session-journal
+telegram.env

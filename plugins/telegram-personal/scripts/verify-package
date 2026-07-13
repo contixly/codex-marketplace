@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd -- "$PLUGIN_ROOT/../.." && pwd)"
+PYTHON_BIN="${PYTHON:-python3}"
+
+bash -n "$SCRIPT_DIR"/*
+cd "$REPO_ROOT"
+PYTHONPATH="$PLUGIN_ROOT/server" pytest "$PLUGIN_ROOT/server/tests"
+"$PYTHON_BIN" scripts/verify_repository.py
+"$PYTHON_BIN" -m json.tool .agents/plugins/marketplace.json >/dev/null
+"$PYTHON_BIN" -m json.tool plugins/telegram-personal/.codex-plugin/plugin.json >/dev/null
+"$PYTHON_BIN" -m json.tool plugins/telegram-personal/.mcp.json >/dev/null

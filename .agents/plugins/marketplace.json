@@ -1,0 +1,20 @@
+{
+  "name": "contixly-codex-marketplace",
+  "interface": {
+    "displayName": "Contixly Codex Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "telegram-personal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/telegram-personal"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
