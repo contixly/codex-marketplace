@@ -1,5 +1,6 @@
-import unittest
+import re
 import subprocess
+import unittest
 from pathlib import Path
 
 
@@ -157,6 +158,19 @@ class DocumentationContractTests(unittest.TestCase):
             "кат" + "ин",
             "кат" + "юха",
         )
+        forbidden_pronouns = (
+            "she",
+            "her",
+            "hers",
+            "herself",
+            "he",
+            "him",
+            "his",
+            "himself",
+        )
+        pronoun_pattern = re.compile(
+            rf"\b(?:{'|'.join(map(re.escape, forbidden_pronouns))})\b"
+        )
 
         violations = []
         for path in paths:
@@ -164,6 +178,10 @@ class DocumentationContractTests(unittest.TestCase):
             for fragment in forbidden_fragments:
                 if fragment in text:
                     violations.append(f"{path.relative_to(ROOT)}: {fragment}")
+            for match in pronoun_pattern.finditer(text):
+                violations.append(
+                    f"{path.relative_to(ROOT)}: {match.group(0)}"
+                )
 
         self.assertEqual(violations, [])
 

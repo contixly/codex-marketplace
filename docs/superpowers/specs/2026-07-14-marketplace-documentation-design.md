@@ -1,6 +1,6 @@
 # Marketplace Documentation Refresh Design
 
-**Date:** 2026-07-14  
+**Date:** 2026-07-14
 **Status:** Approved for implementation planning
 
 ## Goal
