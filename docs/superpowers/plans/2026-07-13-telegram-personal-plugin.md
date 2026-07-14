@@ -1164,7 +1164,7 @@ git commit -m "feat: add secure Telegram plugin setup"
 
 **Interfaces:**
 - Consumes: installed plugin commands, setup script, and MCP tool names.
-- Produces: the setup prompt and durable Telegram routing/safety workflow visible to Katya's Codex.
+- Produces: the setup prompt and durable Telegram routing/safety workflow visible to the installing user's Codex.
 
 - [ ] **Step 1: Write failing documentation contract tests**
 
@@ -1245,7 +1245,7 @@ Plugin `README.md` must include:
 
 - macOS, Codex, Python 3.11-3.14, and Telegram application prerequisites;
 - a concise `my.telegram.org` key-creation step without copying secrets into chat;
-- a prompt Katya can paste: `Install and configure Telegram Personal from the installed plugin. Run its setup script in an interactive terminal and verify authorized=true.`;
+- a prompt an installing user can paste: `Install and configure Telegram Personal from the installed plugin. Run its setup script in an interactive terminal and verify authorized=true.`;
 - runtime data tree, modes `700`/`600`, and backup implications;
 - read and paired write tool table;
 - setup retry/reconfigure, stale-session, missing-tool, restart, and new-task recovery;
@@ -1519,7 +1519,7 @@ Report:
 - marketplace and plugin names/version;
 - commits pushed;
 - exact test, validator, safety-scan, isolated-install, and public-URL results;
-- the two install commands Katya should use;
+- the two install commands an installing user should use;
 - the one manual prerequisite: create Telegram API credentials at `my.telegram.org` and enter them only in the interactive local setup;
 - that no message was sent during development or verification;
-- any live authorization step intentionally left for Katya's machine.
+- any live authorization step intentionally left for the installing user's machine.

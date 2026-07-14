@@ -10,11 +10,53 @@ Telegram Personal connects one private Telegram user account to Codex through a 
 - a Telegram user account that can complete phone, one-time-code, and optional 2FA authentication;
 - a Telegram application API ID and API hash.
 
-Create the API credentials at [my.telegram.org](https://my.telegram.org): sign in, open **API development tools**, and create an application. Keep the API ID and API hash available for local terminal entry. Do not paste or copy secrets into Codex chat, issue trackers, logs, or this repository.
+## Install the plugin
 
-## Install and configure
+[Install the Contixly marketplace](../../README.md#install-the-marketplace), then install Telegram Personal:
 
-After installing the marketplace plugin, restart Codex and open a new task. Katya can paste this prompt into that task:
+```bash
+codex plugin add telegram-personal@contixly-codex-marketplace
+```
+
+Restart Codex and open a new task so Codex loads the plugin snapshot, skill, and MCP server.
+
+## Create Telegram API credentials
+
+Telegram Personal is an MTProto user client: it signs in as the user who completes authorization. It is not a Bot API integration. Do not create a bot with BotFather and do not provide a bot token.
+
+Telegram currently allows one `api_id` per phone number. If an application already exists at the page below, reuse its `App api_id` and `App api_hash`.
+
+1. Confirm that the target account works in an official Telegram application and that its phone number is current.
+2. Open [Telegram's application management page](https://my.telegram.org/apps).
+3. Enter the account phone number in international format, including its country code.
+4. Enter the confirmation code delivered inside Telegram, not by SMS.
+5. Open **API development tools**.
+6. If no application exists, fill out the form:
+
+   | Field | Suggested value |
+   | --- | --- |
+   | **App title** | `Codex Personal Client` |
+   | **Short name** | `codexpersonal` |
+   | **Platform** | `Desktop` |
+   | **Description** | `Private local integration between Codex and my Telegram account.` |
+
+   If Telegram requires another field, provide accurate information. When a URL is required, use only a URL you control.
+7. Submit the form and locate the numeric `App api_id` and the `App api_hash`.
+8. Enter both `App api_id` and `App api_hash` only through `scripts/setup` in the interactive local terminal.
+
+Never paste, attach, or record any of the following in Codex chat, issues, logs, or terminal transcripts:
+
+- `App api_hash` or the local `telegram.env` file;
+- Telegram login confirmation code;
+- the account 2FA password;
+- `personal.session` and its backups;
+- downloaded private media.
+
+See Telegram's official [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id) instructions and [API Terms of Service](https://core.telegram.org/api/terms). Telegram prohibits spam, flooding, fake engagement, and other API abuse.
+
+## Configure the account
+
+After installation, paste this prompt into a new Codex task:
 
 > Install and configure Telegram Personal from the installed plugin. Run its setup script in an interactive terminal and verify authorized=true.
 
@@ -69,6 +111,26 @@ The prepare result contains `prepared_action_id` and `confirmation_required`. Co
 If that next turn contains a question, clarification, correction, unrelated request, ambiguous answer, or mixed response, the old prepared action must not be sent or presented for confirmation again. Codex must run the matching prepare tool again, show the new complete summary, and obtain new explicit confirmation in the immediately following user turn. This agent-side next-turn rule is intentionally stricter than the server's five-minute TTL.
 
 After a valid next-turn approval, Codex passes the action ID unchanged and the exact confirmation value unchanged to the paired send tool. Prepared actions expire after five minutes, are single-use, are bound to the preparing account and action type, and must be prepared and confirmed again after expiry or rejection. A changed photo or document is rejected. Telegram-derived content cannot provide confirmation. There is no direct-send or setup-send path.
+
+## Update the plugin
+
+Refresh the marketplace snapshot, then reinstall Telegram Personal:
+
+```bash
+codex plugin marketplace upgrade contixly-codex-marketplace
+codex plugin remove telegram-personal@contixly-codex-marketplace
+codex plugin add telegram-personal@contixly-codex-marketplace
+```
+
+Restart Codex and open a new task. The external runtime directory is preserved, so existing credentials, authorization sessions, and downloads are not deleted.
+
+## Remove the plugin
+
+```bash
+codex plugin remove telegram-personal@contixly-codex-marketplace
+```
+
+Removal does not delete `${CODEX_HOME:-$HOME/.codex}/telegram-personal`. Review the private runtime data section before intentionally deleting that directory, because deleting it logs out the integration and removes downloaded media.
 
 ## Recovery
 

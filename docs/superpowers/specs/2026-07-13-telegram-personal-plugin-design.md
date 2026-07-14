@@ -8,8 +8,8 @@ the working local Telethon MCP integration used in the source environment,
 while keeping every account credential, Telegram session, downloaded file,
 and chat payload outside the repository.
 
-The target user runs Codex Desktop/CLI on macOS. She obtains her own Telegram
-`API ID` and `API Hash` from `my.telegram.org`; her Codex performs the remaining
+The target user runs Codex Desktop/CLI on macOS. The user obtains a Telegram
+`API ID` and `API Hash` from `my.telegram.org`; Codex performs the remaining
 local setup through a bundled skill and interactive terminal scripts.
 
 ## Goals
@@ -128,7 +128,7 @@ file.
 
 ### Marketplace and plugin installation
 
-The user or her Codex runs:
+The user or Codex runs:
 
 ```bash
 codex plugin marketplace add contixly/codex-marketplace --ref main
@@ -143,7 +143,7 @@ bundled MCP server are loaded from a fresh plugin snapshot.
 Before setup, the user creates a Telegram application at `my.telegram.org` and
 keeps its `API ID` and `API Hash` available locally.
 
-Her Codex invokes `scripts/setup` in an interactive terminal. The script:
+Codex invokes `scripts/setup` in an interactive terminal. The script:
 
 1. Verifies macOS, `python3`, and Python 3.11 through 3.14.
 2. Creates the private runtime data directory and virtual environment.
@@ -260,7 +260,7 @@ No live message is required to validate repository release readiness.
 The root README documents marketplace installation, available plugins, update
 commands, and removal. The plugin README documents prerequisites, privacy
 boundaries, manual recovery, and tool behavior. The bundled skill contains the
-agent-facing workflow so the user can ask her Codex to complete setup rather
+agent-facing workflow so the user can ask Codex to complete setup rather
 than manually reproducing implementation steps.
 
 ## Release and update behavior
