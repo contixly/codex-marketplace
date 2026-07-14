@@ -1,46 +1,49 @@
 # Contixly Codex Marketplace
 
-A public, Git-backed marketplace for reusable Codex plugins. The repository is designed to host multiple independent plugins under `plugins/` without publishing their users' runtime data.
+A public, Git-backed catalog of reusable Codex plugins maintained by Contixly. The repository can host multiple independent plugins under `plugins/`; each catalog entry links to its own prerequisites, installation, configuration, and recovery guide.
 
-## Install
+## Install the marketplace
 
-Add the marketplace and install Telegram Personal:
+Add the marketplace from its public GitHub repository and pin it to `main`:
 
 ```bash
 codex plugin marketplace add contixly/codex-marketplace --ref main
-codex plugin add telegram-personal@contixly-codex-marketplace
 ```
 
-Restart Codex and open a new task after installation so Codex loads the new plugin snapshot, skill, and MCP server. Then follow the [Telegram Personal setup guide](plugins/telegram-personal/README.md).
+Verify that Codex sees the source and inspect the plugins currently offered by it:
+
+```bash
+codex plugin marketplace list
+codex plugin list --marketplace contixly-codex-marketplace --available --json
+```
+
+Choose a plugin from the catalog below and follow its linked guide. Plugin pages own their installation commands and any required account or service configuration.
 
 ## Plugin catalog
 
-| Plugin | Version | Description |
-| --- | --- | --- |
-| `telegram-personal` | `0.2.0` | Connects a private Telegram account locally, with confirmation-gated message, photo, and document sends. |
+| Plugin | Version | Description | Documentation |
+| --- | --- | --- | --- |
+| `telegram-personal` | `0.2.0` | Connect a private Telegram user account locally, with bounded reads and confirmation-gated message, photo, and document sends. | [Telegram Personal](plugins/telegram-personal/README.md) |
 
-## Update
+## Update the marketplace
 
-Refresh the Git marketplace snapshot, then reinstall the plugin from that snapshot:
+Refresh the local snapshot before installing a new plugin version:
 
 ```bash
 codex plugin marketplace upgrade contixly-codex-marketplace
-codex plugin remove telegram-personal@contixly-codex-marketplace
-codex plugin add telegram-personal@contixly-codex-marketplace
 ```
 
-Restart Codex and open a new task after reinstalling. Telegram credentials, sessions, and downloads remain outside the plugin snapshot, so reinstalling does not delete them.
+Each installed plugin may require a reinstall or additional migration steps. Follow that plugin's linked guide after refreshing the marketplace.
 
-## Remove
+## Remove the marketplace
 
-Remove the installed plugin first, then its configured marketplace source:
+Remove installed plugins using their individual guides first. Then remove the marketplace source:
 
 ```bash
-codex plugin remove telegram-personal@contixly-codex-marketplace
 codex plugin marketplace remove contixly-codex-marketplace
 ```
 
-These commands do not delete Telegram Personal's separate runtime data directory. See the plugin guide before deleting that directory.
+Removing a marketplace source does not delete service credentials or other runtime data owned by an installed plugin. Review the plugin guide before deleting any external data directory.
 
 ## License
 

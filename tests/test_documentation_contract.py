@@ -42,19 +42,30 @@ class DocumentationContractTests(unittest.TestCase):
         ):
             self.assertIn(required, text)
 
-    def test_root_readme_has_git_marketplace_commands(self):
+    def test_root_readme_is_marketplace_landing_page(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         for required in (
+            "# Contixly Codex Marketplace",
+            "## Install the marketplace",
             "codex plugin marketplace add contixly/codex-marketplace --ref main",
-            "codex plugin add telegram-personal@contixly-codex-marketplace",
-            "telegram-personal",
-            "0.2.0",
+            "codex plugin marketplace list",
+            "codex plugin list --marketplace contixly-codex-marketplace --available --json",
+            "## Plugin catalog",
+            "[Telegram Personal](plugins/telegram-personal/README.md)",
+            "`0.2.0`",
             "codex plugin marketplace upgrade contixly-codex-marketplace",
-            "codex plugin remove telegram-personal@contixly-codex-marketplace",
             "codex plugin marketplace remove contixly-codex-marketplace",
             "MIT",
         ):
             self.assertIn(required, text)
+
+        for plugin_specific in (
+            "codex plugin add telegram-personal@contixly-codex-marketplace",
+            "codex plugin remove telegram-personal@contixly-codex-marketplace",
+            "personal.session",
+            "Telegram credentials",
+        ):
+            self.assertNotIn(plugin_specific, text)
 
     def test_plugin_readme_states_secret_boundary(self):
         text = (PLUGIN / "README.md").read_text(encoding="utf-8")
