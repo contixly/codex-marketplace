@@ -1,4 +1,5 @@
 import unittest
+import subprocess
 from pathlib import Path
 
 
@@ -135,6 +136,36 @@ class DocumentationContractTests(unittest.TestCase):
         ):
             self.assertIn(required, text)
         self.assertNotIn("Telegram authorization must be completed again", text)
+
+    def test_tracked_markdown_has_no_private_recipient_name(self):
+        completed = subprocess.run(
+            ["git", "ls-files", "-z", "--", "*.md"],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        paths = [
+            ROOT / raw_path.decode("utf-8")
+            for raw_path in completed.stdout.split(b"\0")
+            if raw_path
+        ]
+        forbidden_fragments = (
+            "kat" + "ya",
+            "кат" + "я",
+            "кат" + "е",
+            "кат" + "ю",
+            "кат" + "ин",
+            "кат" + "юха",
+        )
+
+        violations = []
+        for path in paths:
+            text = path.read_text(encoding="utf-8").casefold()
+            for fragment in forbidden_fragments:
+                if fragment in text:
+                    violations.append(f"{path.relative_to(ROOT)}: {fragment}")
+
+        self.assertEqual(violations, [])
 
 
 if __name__ == "__main__":
