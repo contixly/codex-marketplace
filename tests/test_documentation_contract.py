@@ -99,6 +99,33 @@ class DocumentationContractTests(unittest.TestCase):
             self.assertIn(required, text)
         self.assertIn("never commit", text.casefold())
 
+    def test_plugin_readme_has_install_and_telegram_application_guide(self):
+        text = (PLUGIN / "README.md").read_text(encoding="utf-8")
+        for required in (
+            "[Install the Contixly marketplace](../../README.md#install-the-marketplace)",
+            "codex plugin add telegram-personal@contixly-codex-marketplace",
+            "codex plugin marketplace upgrade contixly-codex-marketplace",
+            "codex plugin remove telegram-personal@contixly-codex-marketplace",
+            "https://my.telegram.org/apps",
+            "https://core.telegram.org/api/obtaining_api_id",
+            "https://core.telegram.org/api/terms",
+            "MTProto user client",
+            "BotFather",
+            "bot token",
+            "international format",
+            "inside Telegram, not by SMS",
+            "API development tools",
+            "Telegram Personal for Codex",
+            "codexpersonal",
+            "Desktop",
+            "Private local integration between Codex and my Telegram account.",
+            "one `api_id` per phone number",
+            "App api_id",
+            "App api_hash",
+            "interactive local terminal",
+        ):
+            self.assertIn(required, text)
+
     def test_plugin_readme_explains_reconfiguration_session_behavior(self):
         text = (PLUGIN / "README.md").read_text(encoding="utf-8")
         for required in (
