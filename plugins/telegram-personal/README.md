@@ -35,14 +35,22 @@ Telegram currently allows one `api_id` per phone number. If an application alrea
 
    | Field | Suggested value |
    | --- | --- |
-   | **App title** | `Telegram Personal for Codex` |
+   | **App title** | `Codex Personal Client` |
    | **Short name** | `codexpersonal` |
    | **Platform** | `Desktop` |
    | **Description** | `Private local integration between Codex and my Telegram account.` |
 
    If Telegram requires another field, provide accurate information. When a URL is required, use only a URL you control.
 7. Submit the form and locate the numeric `App api_id` and the `App api_hash`.
-8. Enter those values only into `scripts/setup` in the interactive local terminal. Do not paste them into Codex chat, issues, logs, or this repository.
+8. Enter both `App api_id` and `App api_hash` only through `scripts/setup` in the interactive local terminal.
+
+Never paste, attach, or record any of the following in Codex chat, issues, logs, or terminal transcripts:
+
+- `App api_hash` or the local `telegram.env` file;
+- Telegram login confirmation code;
+- the account 2FA password;
+- `personal.session` and its backups;
+- downloaded private media.
 
 See Telegram's official [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id) instructions and [API Terms of Service](https://core.telegram.org/api/terms). Telegram prohibits spam, flooding, fake engagement, and other API abuse.
 

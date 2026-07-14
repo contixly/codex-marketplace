@@ -167,9 +167,21 @@ git commit -m "docs: make README a marketplace landing page"
 - Consumes: root README anchor `../../README.md#install-the-marketplace`, plugin selector `telegram-personal@contixly-codex-marketplace`, official Telegram application and API terms pages.
 - Produces: self-contained Telegram Personal install/update/remove and credential-creation guide.
 
-- [ ] **Step 1: Add a failing plugin lifecycle and Telegram application contract**
+- [ ] **Step 1: Add failing plugin lifecycle, secret-boundary, and Telegram application contracts**
 
-Add this method after `test_plugin_readme_states_secret_boundary` in `tests/test_documentation_contract.py`:
+Extend the required values in `test_plugin_readme_states_secret_boundary` with:
+
+```python
+            "Never paste, attach, or record any of the following in Codex chat, issues, logs, or terminal transcripts:",
+            "`App api_hash` or the local `telegram.env` file",
+            "Telegram login confirmation code",
+            "account 2FA password",
+            "`personal.session` and its backups",
+            "downloaded private media",
+            "Enter both `App api_id` and `App api_hash` only through `scripts/setup` in the interactive local terminal.",
+```
+
+Add `from urllib.parse import urlparse`, then add this method after the secret-boundary contract:
 
 ```python
     def test_plugin_readme_has_install_and_telegram_application_guide(self):
@@ -188,7 +200,7 @@ Add this method after `test_plugin_readme_states_secret_boundary` in `tests/test
             "international format",
             "inside Telegram, not by SMS",
             "API development tools",
-            "Telegram Personal for Codex",
+            "Codex Personal Client",
             "codexpersonal",
             "Desktop",
             "Private local integration between Codex and my Telegram account.",
@@ -198,6 +210,25 @@ Add this method after `test_plugin_readme_states_secret_boundary` in `tests/test
             "interactive local terminal",
         ):
             self.assertIn(required, text)
+        self.assertNotIn("Telegram Personal" + " for Codex", text)
+
+        credentials_section = text.split(
+            "## Create Telegram API credentials", maxsplit=1
+        )[1].split("\n## ", maxsplit=1)[0]
+        credentials_urls = re.findall(r"https?://[^\s)>]+", credentials_section)
+        official_hosts = {"my.telegram.org", "core.telegram.org"}
+        non_official_urls = [
+            url
+            for url in credentials_urls
+            if urlparse(url).hostname not in official_hosts
+        ]
+        self.assertEqual(non_official_urls, [])
+
+        for rejected_url in (
+            "https://my.telegram.org.example.com/apps",
+            "https://example.com/?next=https://core.telegram.org/api/terms",
+        ):
+            self.assertNotIn(urlparse(rejected_url).hostname, official_hosts)
 ```
 
 - [ ] **Step 2: Run the focused test and verify the red state**
@@ -209,7 +240,7 @@ $HOME/.codex/telegram-telethon/.venv/bin/pytest -q \
   tests/test_documentation_contract.py::DocumentationContractTests::test_plugin_readme_has_install_and_telegram_application_guide
 ```
 
-Expected: FAIL because plugin lifecycle commands and the detailed application-registration flow are absent.
+Expected: FAIL because the complete sensitive-data boundary, compliant application title, plugin lifecycle commands, and detailed application-registration flow are absent.
 
 - [ ] **Step 3: Add plugin installation and Telegram application creation**
 
@@ -241,14 +272,22 @@ Telegram currently allows one `api_id` per phone number. If an application alrea
 
    | Field | Suggested value |
    | --- | --- |
-   | **App title** | `Telegram Personal for Codex` |
+   | **App title** | `Codex Personal Client` |
    | **Short name** | `codexpersonal` |
    | **Platform** | `Desktop` |
    | **Description** | `Private local integration between Codex and my Telegram account.` |
 
    If Telegram requires another field, provide accurate information. When a URL is required, use only a URL you control.
 7. Submit the form and locate the numeric `App api_id` and the `App api_hash`.
-8. Enter those values only into `scripts/setup` in the interactive local terminal. Do not paste them into Codex chat, issues, logs, or this repository.
+8. Enter both `App api_id` and `App api_hash` only through `scripts/setup` in the interactive local terminal.
+
+Never paste, attach, or record any of the following in Codex chat, issues, logs, or terminal transcripts:
+
+- `App api_hash` or the local `telegram.env` file;
+- Telegram login confirmation code;
+- the account 2FA password;
+- `personal.session` and its backups;
+- downloaded private media.
 
 See Telegram's official [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id) instructions and [API Terms of Service](https://core.telegram.org/api/terms). Telegram prohibits spam, flooding, fake engagement, and other API abuse.
 
@@ -318,9 +357,9 @@ git commit -m "docs: add Telegram application setup guide"
 - Consumes: Git's tracked Markdown path list.
 - Produces: a repository-wide public-language invariant for all current and future tracked `.md` files.
 
-- [ ] **Step 1: Add a failing tracked-Markdown neutrality test**
+- [ ] **Step 1: Add a failing, word-precise tracked-Markdown neutrality test**
 
-Add `import subprocess` after `import unittest`, then add:
+Add `import subprocess` after `import unittest`. Assemble every private-name form from separate pieces, match only complete Unicode words, retain the existing standalone gendered-pronoun tuple and its `\b...\b` enforcement, and report every finding as `path:line:match`:
 
 ```python
     def test_tracked_markdown_has_no_private_recipient_name(self):
@@ -335,21 +374,39 @@ Add `import subprocess` after `import unittest`, then add:
             for raw_path in completed.stdout.split(b"\0")
             if raw_path
         ]
-        forbidden_fragments = (
-            "kat" + "ya",
-            "кат" + "я",
-            "кат" + "е",
-            "кат" + "ю",
-            "кат" + "ин",
-            "кат" + "юха",
+        forbidden_name_forms = tuple(
+            "".join(parts)
+            for parts in (
+                ("kat", "ya"),
+                ("кат", "я"),
+                ("кат", "е"),
+                ("кат", "ю"),
+                ("кат", "ин"),
+                ("кат", "юха"),
+            )
         )
+        name_pattern = re.compile(
+            rf"(?<!\w)(?:{'|'.join(map(re.escape, forbidden_name_forms))})(?!\w)",
+            re.IGNORECASE,
+        )
+
+        for forbidden_name in forbidden_name_forms:
+            self.assertIsNotNone(name_pattern.fullmatch(forbidden_name))
+        self.assertIsNone(name_pattern.search("ка" + "тегория"))
 
         violations = []
         for path in paths:
-            text = path.read_text(encoding="utf-8").casefold()
-            for fragment in forbidden_fragments:
-                if fragment in text:
-                    violations.append(f"{path.relative_to(ROOT)}: {fragment}")
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                for match in name_pattern.finditer(line):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{line_number}:{match.group(0)}"
+                    )
+                for match in pronoun_pattern.finditer(line.casefold()):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{line_number}:{match.group(0)}"
+                    )
 
         self.assertEqual(violations, [])
 ```
@@ -363,7 +420,7 @@ $HOME/.codex/telegram-telethon/.venv/bin/pytest -q \
   tests/test_documentation_contract.py::DocumentationContractTests::test_tracked_markdown_has_no_private_recipient_name
 ```
 
-Expected: FAIL and report the two historical plan files that still contain private-recipient language.
+Expected: FAIL and report each historical occurrence with `path:line:match` diagnostics.
 
 - [ ] **Step 3: Neutralize the two document-send plan scenarios**
 
@@ -397,18 +454,16 @@ the two install commands an installing user should use
 any live authorization step intentionally left for the installing user's machine
 ```
 
-- [ ] **Step 5: Run the neutrality test and direct repository scan**
+- [ ] **Step 5: Run the boundary-aware neutrality test**
 
 Run:
 
 ```bash
 $HOME/.codex/telegram-telethon/.venv/bin/pytest -q \
   tests/test_documentation_contract.py::DocumentationContractTests::test_tracked_markdown_has_no_private_recipient_name
-pattern='kat''ya|кат''я|кат''е|кат''ю|кат''ин|кат''юха'
-git grep -n -i -E "$pattern" -- '*.md' && exit 1 || true
 ```
 
-Expected: `1 passed`; the direct scan prints no matches.
+Expected: `1 passed`; all assembled name forms and standalone gendered pronouns produce no matches, while the inline harmless sample proves that the Cyrillic word for “category” is not a false positive.
 
 - [ ] **Step 6: Commit the public-language cleanup**
 

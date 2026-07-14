@@ -59,7 +59,7 @@ The documented flow is:
 5. Open **API development tools**.
 6. If an application already exists for the number, reuse its `App api_id` and `App api_hash`. Telegram currently allows one `api_id` per phone number.
 7. Otherwise complete the application form. Suggested non-secret values are:
-   - **App title:** `Telegram Personal for Codex`;
+   - **App title:** `Codex Personal Client`;
    - **Short name:** `codexpersonal`;
    - **Platform:** `Desktop`;
    - **Description:** `Private local integration between Codex and my Telegram account.`
@@ -67,13 +67,13 @@ The documented flow is:
 9. Submit the form and locate the numeric `App api_id` and the `App api_hash`.
 10. Keep the page open only long enough to enter those values into the plugin's interactive local `scripts/setup` prompt.
 
-The guide links to Telegram's official [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id) instructions and [API Terms of Service](https://core.telegram.org/api/terms).
+The guide links to Telegram's official [Creating your Telegram Application](https://core.telegram.org/api/obtaining_api_id) instructions and [API Terms of Service](https://core.telegram.org/api/terms). Every URL in this credential-creation section must use the exact official host `my.telegram.org` or `core.telegram.org`; lookalike and third-party hosts are rejected.
 
 ## Secret and Account Boundaries
 
-The documentation must state that the following values are never pasted into Codex chat, committed, placed in issues, or included in terminal transcripts:
+The documentation must state that the following values are never pasted, attached, or recorded in Codex chat, issues, logs, or terminal transcripts:
 
-- `api_hash` and the local `telegram.env` containing it;
+- `App api_hash` or the local `telegram.env` containing it;
 - the Telegram login confirmation code;
 - the account's 2FA password;
 - `personal.session` and its backups;
@@ -98,9 +98,9 @@ Automated documentation contracts will verify that:
 1. the root README contains marketplace add, list, upgrade, and removal guidance plus a linked plugin catalog;
 2. the root README does not contain Telegram Personal installation, update, removal, credential, or runtime instructions;
 3. the Telegram Personal README contains its own install, update, and removal commands;
-4. the Telegram guide distinguishes MTProto from BotFather, links official Telegram sources, describes international-format login and in-Telegram confirmation delivery, supplies example form values, and identifies `App api_id` and `App api_hash`;
-5. setup and secret-safety rules remain present;
-6. tracked Markdown files do not contain the removed private person's name or its known variants.
+4. the Telegram guide distinguishes MTProto from BotFather, restricts credential-section URLs to `my.telegram.org` and `core.telegram.org`, describes international-format login and in-Telegram confirmation delivery, supplies Telegram-compliant example form values, and identifies `App api_id` and `App api_hash`;
+5. setup and the complete chat/issue/log/terminal-transcript secret-safety boundary remain present;
+6. tracked Markdown files do not contain the removed private person's complete name forms or standalone gendered pronouns, without matching longer unrelated words.
 
 Repository safety validation, the complete test suite, Markdown review, link/path checks, and `git diff --check` must pass before the implementation is committed.
 
