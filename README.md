@@ -1,6 +1,6 @@
 # Contixly Codex Marketplace
 
-A public, Git-backed catalog of reusable Codex plugins maintained by Contixly. The repository can host multiple independent plugins under `plugins/`; each catalog entry links to its own prerequisites, installation, configuration, and recovery guide.
+A public, Git-backed catalog of reusable Codex plugins and custom pets maintained by Contixly. The repository can host independent plugins under `plugins/` and portable pet packages under `pets/`.
 
 ## Install the marketplace
 
@@ -24,6 +24,15 @@ Choose a plugin from the catalog below and follow its linked guide. Plugin pages
 | Plugin | Version | Description | Documentation |
 | --- | --- | --- | --- |
 | `telegram-personal` | `0.2.0` | Connect a private Telegram user account locally, with bounded reads and confirmation-gated message, photo, and document sends. | [Telegram Personal](plugins/telegram-personal/README.md) |
+
+## Pet catalog
+
+Each pet package contains its `pet.json` manifest and a v2 transparent WebP spritesheet. Select **Install** in the desktop app to add a pet, then choose it in **Settings > Pets**.
+
+| Pet | Description | Installation |
+| --- | --- | --- |
+| `Koda` | A calm, curious midnight-blue pixel cat who focuses deeply, helps eagerly, and stays slightly mischievous. | [Install Koda](codex://pets/install?name=Koda&description=A+calm%2C+curious+midnight-blue+pixel+cat+who+focuses+deeply%2C+helps+eagerly%2C+and+stays+slightly+mischievous.&imageUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fcontixly%2Fcodex-marketplace%2Fmain%2Fpets%2Fkoda%2Fspritesheet.webp&spriteVersionNumber=2) |
+| `WALL-E` | A gentle, touching faithful pixel-art WALL-E cleanup robot with weathered binocular eyes and heavy caterpillar tracks. | [Install WALL-E](codex://pets/install?name=WALL-E&description=A+gentle%2C+touching+faithful+pixel-art+WALL-E+cleanup+robot+with+weathered+binocular+eyes+and+heavy+caterpillar+tracks.&imageUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fcontixly%2Fcodex-marketplace%2Fmain%2Fpets%2Fwall-e%2Fspritesheet.webp&spriteVersionNumber=2) |
 
 ## Update the marketplace
 
